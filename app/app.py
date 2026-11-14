@@ -70,7 +70,7 @@ st.markdown("""<style>
 .ol-label {color: #e8833a; font-size: 2.1rem; font-weight: 700; line-height: 1.2; margin: .1rem 0 .4rem 0;}
 .ol-num {color: #c9c3b8; font-size: .98rem; line-height: 1.55;}
 .ol-num b {color: #ece7de;}
-.figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
+.figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin: -.3rem 0 .9rem 0;}  /* bottom: clear of the card border */
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
 [data-testid="stMetricLabel"] p {color: #a39d92; font-size: .82rem;}
