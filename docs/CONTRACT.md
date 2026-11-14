@@ -1,4 +1,4 @@
-# Veri & Arayüz Sözleşmesi v1.2
+# Veri & Arayüz Sözleşmesi v1.3
 
 Sahibi: **P4 Barış**. Kod karşılığı: [`contract.py`](../contract.py) (sabitler + `validate_hotspots()`).
 Değişiklik → önce P4. Her değişiklik en alttaki **Değişiklik günlüğü**ne yazılır.
@@ -144,10 +144,22 @@ Sadece en az bir tespiti olan hücre-aylar yazılır (eksik = 0).
 ### 7.3 `pipeline/validate.py` (P3)
 | | |
 |---|---|
-| Girdi | `data/monthly_grid.parquet`, `data/hotspots_harm.parquet`, `data/k_factors.csv` |
-| Çıktı | `docs/validation/metrics.json` — `[{"method","region","split","scale","r2","bias","bias_pct","n"}]` |
+| Girdi | `data/monthly_grid.parquet`, `data/hotspots_harm.parquet`, `data/k_factors.csv` (yoksa `data/hotspots.parquet` → sadece ham sayımlar) |
+| Çıktı | `docs/validation/metrics.json` — `[{"data","method","region","split","scale","r2","bias","bias_pct","n"}]` |
 | Çıktı | `docs/validation/*.png` — `pred_vs_true.png`, `annual_raw_vs_harm.png`, `venn_check.png` |
+| Çıktı | `docs/validation/summary.md` — İbrahim için 3 cümlelik özet + yıl yıl test dökümü |
 | Bölünme | eğitim 2012–2021, test 2022–2024 |
+
+`metrics.json` alan değerleri:
+| Alan | İzinli değerler |
+|---|---|
+| `data` | `"mock"` (sentetik) \| `"raw"` (P1, harmonize yok) \| `"harm"` (P2 çıktısı) |
+| `method` | `"harm"` (harmonize) \| `"raw_viirs"` (harmonizasyonsuz karşılaştırma) |
+| `split` | `"train"` (2012–2021) \| `"test"` (2022–2024) \| `"test_2022"` (NOAA-21 öncesi) \| `"test_2023-2024"` (NOAA-21 aktif, eğitimde olmayan uydu) |
+| `region` | `contract.REGIONS` anahtarları |
+
+**Repoya sadece `data = "harm"` olan çıktılar commit'lenir.** Sentetik ya da ham veriden üretilen
+metrikler sunuma ve README'ye girmez.
 
 ### 7.4 `app/query.py` (P4) — P5 sadece bunu kullanır
 ```python
@@ -203,3 +215,4 @@ True ise uygulama "SENTETİK TEST VERİSİ" uyarısı gösterir. Bilimsel değer
 | 1.0 | İlk şema (CLAUDE.md §3) | herkes |
 | 1.1 | `sensor` açık karar olarak işaretlendi; `lat/lon` → `latitude/longitude`; `bright` → `brightness`; `brightness_2` eklendi; `confidence` artık **orijinal değer** (eski `confidence_raw`), sınıf → `confidence_class`; `fire_type` → `type`; yeni: `datetime_utc`, `version`, `region`; archive/NRT kuralı uydu bazlı tarih kesimine çevrildi; `satellite_coverage.csv` eklendi; `weight_harm` yöntemi P2'ye devredildi; `contract.py` doğrulayıcı | P1, P2, P3, P5 |
 | 1.2 | P1 gerçek başlık bulguları: enstrüman uydu kodundan (DL_FIRE'da VIIRS de `brightness` kullanıyor), indirme biçimi tablosu; NOAA-21 başlangıcı 2023-03-01; bölgeler = DL_FIRE indirme alanları (`argentina` ülke, `aachen_eifel` bbox), ülke-yıl dosyaları kullanılmaz; archive/NRT cutoff **(region, satellite)** bazında; `satellite_coverage.csv`'ye `region` sütunu; `data_info()["satellite_ranges"]`; `PRESETS["Aachen/Eifel"]` = indirme kutusu; `to_csv_bytes` her OS'ta `\n` | P1, P2, P5, P6 |
+| 1.3 | `metrics.json`'a `data` alanı (mock/raw/harm); `method`, `split` izinli değerleri (P3 önerisi); `summary.md` resmi çıktı; repoya sadece `data="harm"` metrikleri | P3, P6 |

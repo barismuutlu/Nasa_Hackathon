@@ -1,4 +1,4 @@
-"""Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4 (v1.2).
+"""Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4.
 
 P5 (app.py) parquet'i doğrudan okumaz; sadece bu modülü kullanır:
     from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes

@@ -149,8 +149,18 @@ def _():
     if not p.exists():
         return "ATLANDI (henüz yok)"
     m = pd.read_json(p)
-    missing = {"method", "region", "split", "scale", "r2", "bias", "bias_pct", "n"} - set(m.columns)
+    missing = {"data", "method", "region", "split", "scale", "r2", "bias", "bias_pct", "n"} - set(m.columns)
     assert not missing, f"eksik: {missing}"
+    allowed = {
+        "data": {"mock", "raw", "harm"},
+        "method": {"harm", "raw_viirs"},
+        "split": {"train", "test", "test_2022", "test_2023-2024"},
+    }
+    for col, ok in allowed.items():
+        bad = set(m[col].astype(str)) - ok
+        assert not bad, f"{col}: izinsiz değer {sorted(bad)}"
+    if (m["data"] != "harm").any():
+        return f"⚠️ {(m['data'] != 'harm').sum()} satır harmonize olmayan veriden (repoya commit'leme)"
 
 
 # ---------------------------------------------------------------- 3. query.py uçtan uca
