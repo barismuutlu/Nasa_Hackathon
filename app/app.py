@@ -64,7 +64,9 @@ if st.session_state.get("_preset") != preset:
     st.session_state["view"] = ([(y0 + y1) / 2, (x0 + x1) / 2], 9)
 geom_key = st.session_state.get("drawn") or json.dumps([x0, y0, x1, y1])
 
-df = load(geom_key, pd.Timestamp(d0), pd.Timestamp(d1), mode == "harm")
+# harita: Harmonize'de sadece weight_harm > 0; grafikler: her zaman tüm veri
+df_map = load(geom_key, pd.Timestamp(d0), pd.Timestamp(d1), mode == "harm")
+df = load(geom_key, pd.Timestamp(d0), pd.Timestamp(d1), False)
 
 col_map, col_cal = st.columns([1, 1])
 with col_map:
@@ -79,7 +81,7 @@ with col_map:
     Draw(draw_options={"polyline": False, "circle": False, "marker": False,
                        "circlemarker": False, "polygon": True, "rectangle": True},
          edit_options={"edit": False}).add_to(m)
-    pts = df.sample(MAX_POINTS, random_state=0) if len(df) > MAX_POINTS else df
+    pts = df_map.sample(MAX_POINTS, random_state=0) if len(df_map) > MAX_POINTS else df_map
     for r in pts[["latitude", "longitude"]].itertuples(index=False):
         folium.CircleMarker([r.latitude, r.longitude], radius=2, color="#fde725", fill=True,
                             fill_opacity=0.7, weight=0).add_to(m)
@@ -99,13 +101,20 @@ with col_map:
     if st.session_state.get("drawn") and st.button("Çizimi temizle / Clear drawing"):
         st.session_state["drawn"] = None
         st.rerun()
-    st.caption(f"{len(df):,} tespit / detections"
-               + (f" (haritada {MAX_POINTS:,} örnek / sampled)" if len(df) > MAX_POINTS else ""))
+    st.caption(f"{len(df_map):,} tespit / detections"
+               + (f" (haritada {MAX_POINTS:,} örnek / sampled)" if len(df_map) > MAX_POINTS else ""))
 
 with st.sidebar:
     st.download_button("CSV indir / Download", data=to_csv_bytes(df),
                        file_name=f"hotspots_{preset}_{mode}.csv", mime="text/csv",
                        disabled=df.empty)
+    with st.expander("Veri / Data", expanded=False):
+        st.markdown(
+            f"- Kaynak / Source: `{INFO['path']}`\n"
+            f"- Aralık / Range: {INFO['start']:%Y-%m-%d} → {INFO['end']:%Y-%m-%d}\n"
+            f"- Uydular / Satellites: {', '.join(INFO['satellites'])}\n"
+            f"- Satır / Rows: {INFO['n_rows']:,}\n"
+            f"- Sözleşme / Contract: v{INFO.get('contract', '?')}")
 
 # ---------- Takvim ----------
 with col_cal:
@@ -128,21 +137,58 @@ with col_cal:
     fig = go.Figure(go.Heatmap(
         z=z, x=MONTHS, y=shown.index.astype(str), colorscale="Viridis",
         zmin=0, zmax=float(np.nanmax(z)) if np.isfinite(z).any() else 1,
-        hovertemplate="Yıl/Year %{y}<br>Ay/Month %{x}<br>Tespit/Detections %{z:.1f}<extra></extra>",
+        hoverinfo="skip",
         colorbar=dict(title="Ham" if mode == "raw" else "MODIS-eşd."),
-        hoverongaps=False,
     ))
-    fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10),
+    # Streamlit heatmap tıklamasını yakalamıyor → her hücreye görünmez tıklanabilir nokta
+    gy, gx = np.meshgrid(shown.index.astype(str), MONTHS, indexing="ij")
+    fig.add_trace(go.Scatter(
+        x=gx.ravel(), y=gy.ravel(), mode="markers", customdata=z.ravel(), showlegend=False,
+        marker=dict(symbol="square", size=18, color="rgba(0,0,0,0)"),
+        hovertemplate="Yıl/Year %{y}<br>Ay/Month %{x}<br>Tespit/Detections %{customdata:.1f}<extra></extra>",
+    ))
+    fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10), clickmode="event+select",
                       plot_bgcolor="#cccccc", yaxis=dict(autorange="reversed", dtick=2))
-    st.plotly_chart(fig, width="stretch")
+    ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal")
+    st.caption("Bir hücreye tıkla → anomali kartı / Click a cell → anomaly card")
+    pts_sel = (ev or {}).get("selection", {}).get("points", []) if ev else []
+    if pts_sel:
+        p0 = pts_sel[0]
+        sel = (int(p0["y"]), MONTHS.index(p0["x"]) + 1)
+        if sel != st.session_state.get("_last_sel"):
+            st.session_state["_last_sel"] = sel
+            st.session_state["sel_year"], st.session_state["sel_month"] = sel
+
+# ---------- Yıllık karşılaştırma ----------
+st.subheader("Yıllık toplam: Ham vs Harmonize / Annual total: Raw vs Harmonized")
+raw_y = monthly_matrix(df, "raw").sum(axis=1, min_count=1)
+harm_y = monthly_matrix(df, "harm").sum(axis=1, min_count=1)
+fy = go.Figure()
+fy.add_trace(go.Scatter(x=raw_y.index, y=raw_y.values, name="Ham / Raw", mode="lines+markers",
+                        line=dict(color="#440154", width=3)))
+if harm_y.notna().any():
+    fy.add_trace(go.Scatter(x=harm_y.index, y=harm_y.values, name="Harmonize / Harmonized",
+                            mode="lines+markers", line=dict(color="#35b779", width=3)))
+for xv, lbl in [(2012.0, "S-NPP"), (2018.25, "NOAA-20"), (2024.0, "NOAA-21"), (2026.83, "S-NPP bitti / ended")]:
+    fy.add_vline(x=xv, line_dash="dash", line_color="#888", annotation_text=lbl,
+                 annotation_position="top left")
+fy.update_layout(height=380, margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified",
+                 xaxis_title="Yıl / Year", yaxis_title="Tespit / Detections",
+                 legend=dict(orientation="h", y=-0.2))
+st.plotly_chart(fy, width="stretch")
+st.caption("Kısmi yıllar (ilk/son) eksik aylar nedeniyle düşük görünebilir. "
+           "/ First and last years are partial.")
 
 # ---------- Anomali ----------
 st.subheader("Anomali / Anomaly")
 st.caption("tespit sayısı anomalisi / detection-count anomaly")
 c1, c2, _ = st.columns([1, 1, 2])
-years = list(mat.index)
-yr = c1.selectbox("Yıl / Year", years, index=len(years) - 1)
-mo = c2.selectbox("Ay / Month", range(1, 13), format_func=lambda i: MONTHS[i - 1])
+years = [int(y) for y in mat.index]
+if st.session_state.get("sel_year") not in years:
+    st.session_state["sel_year"] = 2026 if 2026 in years else years[-1]
+st.session_state.setdefault("sel_month", 8)
+yr = c1.selectbox("Yıl / Year", years, key="sel_year")
+mo = c2.selectbox("Ay / Month", list(range(1, 13)), format_func=lambda i: MONTHS[i - 1], key="sel_month")
 a = anomaly(mat, yr, mo)
 k1, k2, k3 = st.columns(3)
 diff = a["value"] - a["mean"] if np.isfinite(a.get("value", np.nan)) else np.nan
@@ -151,3 +197,4 @@ k1.metric("Tespit / Detections", fmt(a["value"]),
 k2.metric("z-skoru / z-score", fmt(a["z"], ".2f"))
 rank = f"sıra/rank {a['rank']}/{a['n_years']}" if a.get("rank") is not None else None
 k3.metric("Durum / Label", a["label"], rank, delta_color="off")
+st.caption(f"Ortalama ± std / Mean ± std: {fmt(a['mean'])} ± {fmt(a['std'])} ({a['n_years']} yıl / years)")
