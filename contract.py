@@ -1,4 +1,4 @@
-"""Veri sözleşmesi v1.3 — sahibi P4 Barış. Belge: docs/CONTRACT.md
+"""Veri sözleşmesi v1.4 — sahibi P4 Barış. Belge: docs/CONTRACT.md
 
 Sadece SABİTLER ve DOĞRULAYICI içerir; ingest/harmonize mantığı burada YOK.
 Kullanım (pipeline/ veya app/ içinden):
@@ -16,7 +16,7 @@ import re
 
 import pandas as pd
 
-CONTRACT_VERSION = "1.3"
+CONTRACT_VERSION = "1.4"
 
 # ---------------------------------------------------------------- sabit değer kümeleri
 

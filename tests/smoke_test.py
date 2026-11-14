@@ -154,7 +154,7 @@ def _():
     allowed = {
         "data": {"mock", "raw", "harm"},
         "method": {"harm", "raw_viirs"},
-        "split": {"train", "test", "test_2022", "test_2023-2024"},
+        "split": {"train", "test", "test_2022", "test_2023-2024", "transfer_2012-2026"},
     }
     for col, ok in allowed.items():
         bad = set(m[col].astype(str)) - ok
