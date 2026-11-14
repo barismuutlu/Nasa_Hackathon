@@ -16,7 +16,7 @@ import re
 
 import pandas as pd
 
-CONTRACT_VERSION = "1.4"
+CONTRACT_VERSION = "1.5"
 
 # ---------------------------------------------------------------- sabit değer kümeleri
 

@@ -31,10 +31,10 @@ Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tesp
 ## 2. Ekip & dosya sahipliği
 | Rol | Kişi | Sahip olduğu dosyalar |
 |---|---|---|
-| P1 Veri Mühendisi | Süleyman | `pipeline/ingest.py`, `pipeline/burned_area_check.py` (MCD64A1 destekleyici kontrol, ana şemaya dokunmaz), `data/sample/` |
-| P2 Harmonizasyon | Bahtiyar | `pipeline/harmonize.py` |
+| P1 Veri Mühendisi | Süleyman | `pipeline/ingest.py`, `pipeline/weather_power.py` (NASA POWER, deneysel), `pipeline/burned_area_check.py` (MCD64A1 destekleyici kontrol, ana şemaya dokunmaz), `data/sample/` |
+| P2 Harmonizasyon | Bahtiyar | `pipeline/harmonize.py`, `forecast/` (aylık prototip, EXPERIMENTAL; uygulamadaki 30 günlük görünüm `pipeline/forecast.py`) |
 | P3 ML & Doğrulama | Oğuzhan | `pipeline/validate.py`, `docs/validation/` |
-| P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `README.md`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
+| P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `pipeline/forecast.py` (deneysel görünüm), `docs/forecast/`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `README.md`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
 | P5 Arayüz | Yusuf | `app/app.py`, `.streamlit/config.toml` |
 | P6 Sunum & Test | İbrahim | `docs/pitch/` |
 
@@ -67,6 +67,7 @@ data/deploy/      Streamlit Cloud için küçültülmüş veri (<50 MB, git'e gi
 data/*.parquet, data/*.csv   tam veri ve ara çıktılar (git'e GİRMEZ — Drive/USB)
 docs/CONTRACT.md  sözleşme (P4)
 docs/validation/  P3 çıktıları (png + metrics.json)
+docs/forecast/    P4 deneysel görünüm çıktıları (CONTRACT §7.5)
 docs/pitch/       P6
 tests/smoke_test.py  uçtan uca duman testi (P4)
 ```
@@ -106,6 +107,7 @@ source .venv/bin/activate
 python pipeline/ingest.py        # P1 → data/hotspots.parquet
 python pipeline/harmonize.py     # P2 → data/hotspots_harm.parquet, monthly_grid.parquet, k_factors.csv
 python pipeline/validate.py      # P3 → docs/validation/
+python pipeline/forecast.py      # P4 → data/deploy/forecast.parquet, docs/forecast/ (deneysel)
 python tests/smoke_test.py       # P4 → sözleşme + query uçtan uca kontrol
 streamlit run app/app.py         # P5
 ```

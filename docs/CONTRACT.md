@@ -1,4 +1,4 @@
-# Veri & Arayüz Sözleşmesi v1.4
+# Veri & Arayüz Sözleşmesi v1.5
 
 Sahibi: **P4 Barış**. Kod karşılığı: [`contract.py`](../contract.py) (sabitler + `validate_hotspots()`).
 Değişiklik → önce P4. Her değişiklik en alttaki **Değişiklik günlüğü**ne yazılır.
@@ -171,7 +171,7 @@ data_info() -> dict
     # {"path": str, "is_mock": bool, "has_harm": bool, "start": Timestamp, "end": Timestamp,
     #  "n_rows": int, "satellites": list[str],
     #  "satellite_ranges": {uydu: (ilk_tarih, son_tarih)},   ← v1.2, uydu değişim çizgileri için
-    #  "contract": "1.2"}
+    #  "contract": "1.5"}
 
 get_hotspots(geom, start=None, end=None, harmonized=False) -> pd.DataFrame
     # geom: PRESETS adı | (lon_min, lat_min, lon_max, lat_max) | GeoJSON Feature/Polygon/MultiPolygon
@@ -191,9 +191,63 @@ anomaly(matrix, year, month) -> dict
     # label: "çok yüksek" (z>2) | "yüksek" (z>1) | "normal" | "düşük" (z<-1) | "tespit yok" | "veri yok"
 
 to_csv_bytes(df) -> bytes                 # UTF-8; index adı varsa index de yazılır
+
+forecast(geom) -> dict | None             # v1.5, DENEYSEL (§7.5). Görünüm hücresi yoksa None (ör. Aachen)
+    # {"start", "end", "data_through": Timestamp,   30 günlük hedef penceresi (ör. 2026-11-15 → 12-14)
+    #  "pred", "p10", "p90": float,          bölge toplamı, MODIS-eşd. tespit; %80 aralık (geriye dönük test hatalarından)
+    #  "normal": float, "ratio": float,      normal = aynı pencerenin son 10 yıl ortalaması
+    #  "label": "below normal" (≤1/1,5×) | "near normal" | "above normal" (≥1,5×),
+    #  "n_cells": int, "skill": float, "direction_hit_rate": float, "backtest_years": (2015, 2025),
+    #  "cells": DataFrame}                   §7.5 satırları + "ratio" (hücre, yumuşatılmış: (e+1)/(n+1))
+    # hücre seçimi: 1° hücre MERKEZİ geom içinde; hotspot dosyasından bağımsız
 ```
 Veri dosyası önceliği: `$HOTSPOTS_PATH` → `data/hotspots_harm.parquet` → `data/hotspots.parquet`
 → `data/deploy/hotspots_deploy.parquet` → `data/mock/hotspots_mock.parquet`.
+
+### 7.5 `pipeline/forecast.py` (P4) — DENEYSEL 30 günlük tespit görünümü (v1.5)
+| | |
+|---|---|
+| Girdi | `data/hotspots_harm.parquet` (sadece `argentina`, günlük Σ `weight_harm`) — sadece NASA FIRMS |
+| Çıktı | `data/deploy/forecast.parquet` — aşağıda (küçük, git'e girer) |
+| Çıktı | `docs/forecast/metrics.json`, `backtest.png`, `summary.md` |
+| Yöntem | P2 Bahtiyar'ın normal + kalıcılık modeli, 30 günlük kayan pencere: `log1p(hedef) = normal + a·hücre sapması + b·bölge sapması`; girdi penceresi hedeften 2 gün önce biter. Bölge toplamı = oran × son 10 yılın aritmetik normali (log toplamı −%24 yanlıydı) |
+| Test | 2015–2025, her ayın 15'i (132 başlangıç), her yıl yalnızca önceki yıllarla; beceri = 1 − MSE_model/MSE_normal |
+
+`forecast.parquet` (tek 30 günlük pencere):
+| Sütun | dtype | Not |
+|---|---|---|
+| `cell_lat`, `cell_lon` | float64 | 1° hücre merkezi: `floor(x) + 0.5` |
+| `start`, `end` | datetime64[ns] | hedef penceresi (dahil), `end = start + 29 gün` |
+| `expected_geo` | float64 | `expm1(log tahmini)`, ≥ 0 — sadece ORAN için; toplanırsa düşük verir |
+| `normal_geo` | float64 | `expm1(log normal)`, ≥ 0 |
+| `normal` | float64 | aynı pencerenin son 10 yıl aritmetik ortalaması (MODIS-eşd. tespit), ≥ 0 |
+| `region` | string | `argentina` |
+| `data_through` | datetime64[ns] | kullanılan son tam gün (son NRT günü atlanır) |
+
+Görünüm bir **tespit sayısı** görünümüdür, yangın tahmini değildir (§8); "deneysel" etiketiyle ve test
+sayılarıyla sunulur. Uç olayları önceden göremez. NASA POWER hava ve NASA MERRA-2 El Niño göstergesi denendi,
+iyileştirmedi (dal `p4/forecast-experiments`).
+
+### 7.6 `pipeline/weather_power.py` (P1) — NASA POWER aylık hava (v1.5, isteğe bağlı girdi)
+| | |
+|---|---|
+| Girdi | `data/hotspots.parquet` (`argentina` 1° hücreleri) + NASA POWER daily point API (PRECTOTCORR, T2M_MAX, RH2M) |
+| Çıktı | `data/weather_power.parquet` (git dışı, ~2 MB); ham yanıtlar `data/raw/power/` |
+| Kullanan | — (deneyde test edildi, §7.5; dal `p4/forecast-experiments`) |
+
+| Sütun | dtype | Not |
+|---|---|---|
+| `cell_lat`, `cell_lon` | float64 | 1° hücre merkezi `floor(x) + 0.5` (§7.5 ile aynı) |
+| `year` | int16 | |
+| `month` | int8 | |
+| `prec_mm` | float64 | aylık TOPLAM yağış, mm |
+| `tmax_c` | float64 | günlük maks. sıcaklıkların aylık ortalaması, °C |
+| `rh_pct` | float64 | aylık ortalama bağıl nem, % |
+| `n_days` | int16 | geçerli gün sayısı; içinde bulunulan ay kısmi  |
+
+Değer hücre ortalaması değil, hücre merkezini içeren MERRA-2 kutusunun (0,5° × 0,625°) değeri; günler POWER'ın
+yerel güneş zamanı (LST), FIRMS gibi UTC değil. **14 Kas sonucu:** test hatası %45 → %47, önceden konan kabul
+eşiği (< %34) sağlanmadı; 30 günlük modelde de beceri 0,238 → 0,239 → görünüm modelinde KULLANILMIYOR.
 
 ## 8. Terminoloji (uygulama, slayt, proje sayfası)
 | Doğru | Yanlış |
@@ -218,3 +272,4 @@ True ise uygulama "SENTETİK TEST VERİSİ" uyarısı gösterir. Bilimsel değer
 | 1.2 | P1 gerçek başlık bulguları: enstrüman uydu kodundan (DL_FIRE'da VIIRS de `brightness` kullanıyor), indirme biçimi tablosu; NOAA-21 başlangıcı 2023-03-01; bölgeler = DL_FIRE indirme alanları (`argentina` ülke, `aachen_eifel` bbox), ülke-yıl dosyaları kullanılmaz; archive/NRT cutoff **(region, satellite)** bazında; `satellite_coverage.csv`'ye `region` sütunu; `data_info()["satellite_ranges"]`; `PRESETS["Aachen/Eifel"]` = indirme kutusu; `to_csv_bytes` her OS'ta `\n` | P1, P2, P5, P6 |
 | 1.3 | `metrics.json`'a `data` alanı (mock/raw/harm); `method`, `split` izinli değerleri (P3 önerisi); `summary.md` resmi çıktı; repoya sadece `data="harm"` metrikleri | P3, P6 |
 | 1.4 | `split="transfer_2012-2026"` (sadece aachen_eifel; P3 önerisi) | P3, P6 |
+| 1.5 | DENEYSEL 30 günlük görünüm: `pipeline/forecast.py` (P4, yöntem P2), `data/deploy/forecast.parquet`, `docs/forecast/`, `query.forecast(geom)` (§7.4, §7.5); NASA POWER hava girdisi `pipeline/weather_power.py` (P1, §7.6) test edildi, kullanılmıyor. Sadece NASA verisi. Mevcut API değişmedi | P1, P2, P5, P6 |
