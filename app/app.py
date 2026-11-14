@@ -118,11 +118,11 @@ st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
 q1.button("Hohes Venn · April 2011", width="stretch", on_click=demo, args=("Hohes Venn", True, 2011, 4),
           kwargs=dict(note="April 2011, MODIS-only era: 17 detections on 25–26 April, the highest April in "
-                           "26 years. Points on the map mark that month's detections."),
+                           "26 years. The map shows that month only."),
           help="MODIS-only era: highest April in 26 years (harmonized)")
 q2.button("Hohes Venn · August 2026", width="stretch", on_click=demo, args=("Hohes Venn", True, 2026, 8),
           kwargs=dict(note="August 2026, VIIRS era: 1,899 raw detections, 169 MODIS-equivalent after "
-                           "harmonization, the highest August in 26 years. Points on the map mark that month."),
+                           "harmonization, the highest August in 26 years. The map shows that month only."),
           help="Raw 1,899 vs harmonized 169 detections")
 q3.button("La Rioja · satellite jumps", width="stretch", on_click=demo,
           args=("La Rioja (AR)", False, 2012, 4, True),
@@ -134,29 +134,28 @@ _ev = st.session_state.get("event")
 if _ev and _ev["preset"] == st.session_state.get("preset", _ev["preset"]) and _ev["note"]:
     st.markdown(f'<div class="facts">{_ev["note"]}</div>', unsafe_allow_html=True)
 
-# ---------- Sidebar ----------
-with st.sidebar:
-    preset = st.selectbox("Region", list(PRESETS), key="preset")
-    mode_lbl = st.radio("Series", [RAW, HARM], horizontal=True, key="mode_lbl")
-    mode = "raw" if mode_lbl == RAW else "harm"
-    st.caption("Raw: detection count, all satellites. Harmonized: MODIS-equivalent estimate.")
-    y_min, y_max = INFO["start"].year, INFO["end"].year
-    st.session_state.setdefault("years", (y_min, y_max))
-    y0, y1 = st.slider("Year range", y_min, y_max, key="years")
-    d0 = max(pd.Timestamp(y0, 1, 1), INFO["start"]).date()
-    d1 = min(pd.Timestamp(y1, 12, 31), INFO["end"]).date()
-    with st.expander("Exact dates"):
-        exact = st.checkbox("Filter by day", key="exact")
-        e0 = st.date_input("Start", value=d0, min_value=INFO["start"].date(),
-                           max_value=INFO["end"].date(), format="YYYY-MM-DD", key="e0", disabled=not exact)
-        e1 = st.date_input("End", value=d1, min_value=INFO["start"].date(),
-                           max_value=INFO["end"].date(), format="YYYY-MM-DD", key="e1", disabled=not exact)
-        if exact:
-            if e0 > e1:
-                st.warning("Start date is after end date")
-            else:
-                d0, d1 = e0, e1
-    st.caption(f"Selected: {d0:%Y-%m-%d} → {d1:%Y-%m-%d}")
+# ---------- Controls (on the page, no sidebar) ----------
+c_reg, c_ser, c_time, c_dates = st.columns([1.3, 1.3, 2.4, 1], vertical_alignment="bottom")
+preset = c_reg.selectbox("Region", list(PRESETS), key="preset")
+mode_lbl = c_ser.radio("Series", [RAW, HARM], horizontal=True, key="mode_lbl",
+                       help="Raw: detection count, all satellites. Harmonized: MODIS-equivalent estimate.")
+mode = "raw" if mode_lbl == RAW else "harm"
+y_min, y_max = INFO["start"].year, INFO["end"].year
+st.session_state.setdefault("years", (y_min, y_max))
+y0, y1 = c_time.slider("Year range", y_min, y_max, key="years")
+d0 = max(pd.Timestamp(y0, 1, 1), INFO["start"]).date()
+d1 = min(pd.Timestamp(y1, 12, 31), INFO["end"]).date()
+with c_dates.popover("Exact dates", width="stretch"):
+    exact = st.checkbox("Filter by day", key="exact")
+    e0 = st.date_input("Start", value=d0, min_value=INFO["start"].date(),
+                       max_value=INFO["end"].date(), format="YYYY-MM-DD", key="e0", disabled=not exact)
+    e1 = st.date_input("End", value=d1, min_value=INFO["start"].date(),
+                       max_value=INFO["end"].date(), format="YYYY-MM-DD", key="e1", disabled=not exact)
+    if exact:
+        if e0 > e1:
+            st.warning("Start date is after end date")
+        else:
+            d0, d1 = e0, e1
 
 # ---------- Map ----------
 x0, y0, x1, y1 = PRESETS[preset]
@@ -202,6 +201,10 @@ AREA_TXT = (f"{AREA[0][0]:.2f}–{AREA[1][0]:.2f}° lat, {AREA[0][1]:.2f}–{ARE
 col_map, col_cal = st.container(), st.container()
 with col_map.container(border=True):
     st.subheader("Spatial distribution")
+    # main event selected → the heat layer shows only that month (otherwise the whole selected period)
+    ev = st.session_state.get("event")
+    ev_on = bool(ev and ev["highlight"] and ev["preset"] == preset and not st.session_state.get("drawn"))
+    shown = (df_map[(df_map["year"] == ev["year"]) & (df_map["month"] == ev["month"])] if ev_on else df_map)
     m = folium.Map(tiles=None)
     _esri = "https://server.arcgisonline.com/ArcGIS/rest/services"
     folium.TileLayer(f"{_esri}/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", name="Satellite",
@@ -216,7 +219,7 @@ with col_map.container(border=True):
     folium.Marker([y1, x1], icon=folium.DivIcon(icon_size=(0, 0), html=(
         '<div style="transform:translate(-100%,6px);display:inline-block;white-space:nowrap;'
         'background:#b3261e;color:#fff;font:600 12px ui-monospace,Menlo,monospace;'
-        f'padding:3px 7px;border-radius:3px;">{len(df_map):,}</div>'))).add_to(m)
+        f'padding:3px 7px;border-radius:3px;">{len(shown):,}</div>'))).add_to(m)
     # drawn area lives in Draw's OWN layer → the trash tool can delete it
     drawn_fg = folium.FeatureGroup(name="drawn")
     if st.session_state.get("drawn"):
@@ -231,20 +234,10 @@ with col_map.container(border=True):
          draw_options={"polyline": False, "circle": False, "marker": False,
                        "circlemarker": False, "polygon": True, "rectangle": True},
          edit_options={"edit": False, "remove": True}).add_to(m)
-    pts = df_map.sample(MAX_POINTS, random_state=0) if len(df_map) > MAX_POINTS else df_map
+    pts = shown.sample(MAX_POINTS, random_state=0) if len(shown) > MAX_POINTS else shown
     if len(pts):
         HeatMap(pts[["latitude", "longitude"]].to_numpy().tolist(), radius=8, blur=10, min_opacity=0.35,
                 gradient={0.2: "#7a0403", 0.45: "#d93806", 0.7: "#fe9b2d", 0.9: "#ffd84a", 1.0: "#fff7c2"}).add_to(m)
-    # main event: that month's detections as points on top of the all-time heat layer
-    ev = st.session_state.get("event")
-    n_ev = 0
-    if ev and ev["highlight"] and ev["preset"] == preset:
-        ev_pts = df_map[(df_map["year"] == ev["year"]) & (df_map["month"] == ev["month"])]
-        n_ev = len(ev_pts)
-        for la, lo in (ev_pts.sample(1500, random_state=0) if n_ev > 1500 else ev_pts)[
-                ["latitude", "longitude"]].to_numpy():
-            folium.CircleMarker([la, lo], radius=4, color="#ffffff", weight=1.2, fill=True,
-                                fill_color="#d93806", fill_opacity=0.95).add_to(m)
     # only drawing events are returned → pan/zoom does not rerun the page
     out = st_folium(m, height=480, use_container_width=True, returned_objects=["all_drawings"],
                     key=f"map_{preset}_{st.session_state['map_ver']}")
@@ -261,32 +254,24 @@ with col_map.container(border=True):
     if st.session_state.get("drawn"):
         st.button("Back to region", icon=":material/undo:", on_click=reset_drawing,
                   help=f"Clear the drawing and return to the '{preset}' box")
-    sampled = f"; heat layer from a {MAX_POINTS:,}-point sample" if len(df_map) > MAX_POINTS else ""
+    sampled = f"; heat layer from a {MAX_POINTS:,}-point sample" if len(shown) > MAX_POINTS else ""
+    period = f"{MONTHS[ev['month'] - 1]} {ev['year']} only" if ev_on else f"{d0:%Y-%m-%d} → {d1:%Y-%m-%d}"
     figcap(1, "Detection density.",
-           f"{len(df_map):,} {'harmonized (weight > 0)' if mode == 'harm' else 'raw'} detections, "
-           f"{d0:%Y-%m-%d} → {d1:%Y-%m-%d}{sampled}. Frame: preset region; badge: detections shown. "
-           "Basemap: Esri World Imagery. "
-           + (f"Points: {n_ev:,} detections in {MONTHS[ev['month'] - 1]} {ev['year']}. " if n_ev else "") +
-           "Draw a rectangle or polygon to analyse a custom area.")
+           f"{len(shown):,} {'harmonized (weight > 0)' if mode == 'harm' else 'raw'} detections, "
+           f"{period}{sampled}. Frame: preset region; badge: detections shown. "
+           "Basemap: Esri World Imagery. Draw a rectangle or polygon to analyse a custom area.")
     if preset == "Aachen/Eifel":
         st.caption("Note: the NW corner of the box (Aachen city, north of ≈50.73°N / west of 6.10°E) is outside "
                    "the download area; empty cells there mean no data, not zero detections.")
 
-with st.sidebar:
-    st.divider()
-    _conf = df["confidence_class"].astype(str).value_counts() if len(df) else {}
-    st.markdown(f"**{len(df):,}** raw detections in selection")
-    st.caption("FIRMS confidence: " + " · ".join(
-        f"{_cls} {int(_conf.get(_cls, 0)):,}" for _cls in ["low", "nominal", "high"]))
-    st.download_button("Download CSV", data=lambda: to_csv_bytes(df), icon=":material/download:",
-                       file_name=f"hotspots_{preset}_{mode}.csv", mime="text/csv", disabled=df.empty)
-    with st.expander("Data provenance"):
-        st.markdown(
-            f"- File: `{INFO['path']}`\n"
-            f"- Range: {INFO['start']:%Y-%m-%d} → {INFO['end']:%Y-%m-%d}\n"
-            f"- Satellites: {', '.join(INFO['satellites'])}\n"
-            f"- Rows: {INFO['n_rows']:,}\n"
-            f"- Data contract: v{INFO.get('contract', '?')}")
+c_stat, c_csv = st.columns([4, 1], vertical_alignment="center")
+_conf = df["confidence_class"].astype(str).value_counts() if len(df) else {}
+c_stat.markdown(f'<div class="facts" style="margin:0"><b>{len(df):,}</b> raw detections in selection, '
+                f'{d0:%Y-%m-%d} → {d1:%Y-%m-%d} · FIRMS confidence: ' + " · ".join(
+                    f"{_cls} {int(_conf.get(_cls, 0)):,}" for _cls in ["low", "nominal", "high"]) + "</div>",
+                unsafe_allow_html=True)
+c_csv.download_button("Download CSV", data=lambda: to_csv_bytes(df), icon=":material/download:", width="stretch",
+                      file_name=f"hotspots_{preset}_{mode}.csv", mime="text/csv", disabled=df.empty)
 
 
 # ---------- Calendar + selected cell (fragment) ----------
@@ -512,7 +497,9 @@ def methods_section():
             "- **VIIRS** 375 m: S-NPP (2012-01 → 2026-11-02), NOAA-20 (2018-04 →), NOAA-21 (2023-03 →).\n"
             "- Supporting check (not independent): MCD64A1 burned area for Hohes Venn — "
             "Apr 2011: 9/17 MODIS detections inside burned pixels; Aug 2026: 93/105 MODIS, 1,674/1,794 VIIRS.\n"
-            f"- Loaded file: `{INFO['path']}` · {INFO['n_rows']:,} rows · data contract v{INFO.get('contract', '?')}.")
+            f"- Loaded file: `{INFO['path']}` · {INFO['n_rows']:,} rows · "
+            f"{INFO['start']:%Y-%m-%d} → {INFO['end']:%Y-%m-%d} · satellites: {', '.join(INFO['satellites'])} · "
+            f"data contract v{INFO.get('contract', '?')}.")
 
 
 with col_cal.container(border=True):
