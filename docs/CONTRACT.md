@@ -178,7 +178,8 @@ get_hotspots(geom, start=None, end=None, harmonized=False) -> pd.DataFrame
     # start/end: tarih benzeri, dahil, UTC; harmonized=True → sadece weight_harm > 0
     # dönüş: §1 sütunları (aynı dtype'lar), 0 satır olabilir
 
-monthly_matrix(df, mode="raw") -> pd.DataFrame
+monthly_matrix(df, mode="raw", start=None, end=None) -> pd.DataFrame
+    # start/end = get_hotspots'a verilen tarih filtresinin aynısı → aralık dışı aylar NaN (v1.3, geriye uyumlu)
     # index "year" (int, veri kapsamındaki tüm yıllar), columns "month" 1..12, float64
     # raw: satır sayısı (tüm uydular) | harm: Σ weight_harm
     # kapsam dışı ay → NaN; kapsam içinde tespit yok → 0; harmonize veri yoksa harm → tamamen NaN
