@@ -102,6 +102,16 @@ oran = MODIS / (aktif VIIRS uydusu başına VIIRS). Harmonizasyondan bağımsız
 | harm | 2011-04 | 17 MODIS-eşdeğeri tespit — 26 yılın en yüksek Nisan ayı; aynı ayın diğer yıllardaki ortalamasının (≈0.6) 29 katı, diğer yılların en fazlası 3 | evet |
 | harm | 2026-08 | 169 MODIS-eşdeğeri tespit — 26 yılın en yüksek Ağustos ayı; aynı ayın diğer yıllardaki ortalamasının (≈0.1) 2.115 katı, diğer yılların en fazlası 2 | evet |
 
+### Destekleyici kanıt: MCD64A1 yanmış alan (P1, `data/burned_area_check.csv`)
+
+Tespit, MCD64A1'in (aylık yanmış alan, ~500 m) ±16 gün içinde yanmış işaretlediği bir piksele (3×3 komşuluk ≈ 1,4 km) düşüyor mu? **Bağımsız doğrulama değildir**: MCD64A1 algoritması MODIS aktif yangın verisini de kullanır ve küçük yanıkları kaçırabilir. 'bilinmiyor' (unknown/no_data) ≠ 'yanmamış'.
+
+| olay | enstrüman | eşleşti | yanmamış | başka zamanda yanık | bilinmiyor | toplam |
+|---|---|---|---|---|---|---|
+| Nisan 2011 | MODIS | 9 (53%) | 8 | 0 | 0 | 17 |
+| Ağustos 2026 | MODIS | 93 (89%) | 12 | 0 | 0 | 105 |
+| Ağustos 2026 | VIIRS | 1674 (93%) | 120 | 0 | 0 | 1794 |
+
 ## Sunum için 3 cümle (P6)
 
 1. Arjantin'de (eğitim bölgesi), eğitimde kullanılmayan 2022–2024 yıllarında harmonize VIIRS tahmini MODIS tespit sayısını 1° hücre-ay ölçeğinde R²=0.79 ile, toplamda +6.7% sapmayla tahmin ediyor.

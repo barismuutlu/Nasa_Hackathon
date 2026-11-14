@@ -52,6 +52,10 @@ RAW_PATH = DATA / "hotspots.parquet"
 GRID_PATH = DATA / "monthly_grid.parquet"
 K_PATH = DATA / "k_factors.csv"
 MOCK_PATH = DATA / "mock" / "hotspots_mock.parquet"
+# P1 burned_area_check.py çıktısı (isteğe bağlı) — MCD64A1 destekleyici kanıt, metrik DEĞİL
+BURN_PATH = Path(os.environ.get("P3_BURN", DATA / "burned_area_check.csv"))
+BURN_STATUSES = {"burned_match", "unburned", "burned_other_time", "unknown", "no_data"}
+BURN_GROUPS = {"venn_2011": (2011, 4), "venn_2026": (2026, 8)}
 OUT = ROOT / "docs" / "validation"
 
 TRAIN_YEARS = range(2012, 2022)   # 2012–2021 (P2 k'yı buradan öğrenir)
@@ -296,7 +300,8 @@ def month_matrix(box: pd.DataFrame, values: pd.Series | None, ym_min, ym_max) ->
     return mat
 
 
-def venn_check(df: pd.DataFrame, is_mock: bool, has_harm: bool) -> list[dict]:
+def venn_check(df: pd.DataFrame, is_mock: bool, has_harm: bool,
+               burn: pd.DataFrame | None = None) -> list[dict]:
     """Kutu ile (region değil). Anomali/sıra: uygulamayla aynı fonksiyon (query.anomaly)."""
     sys.path.insert(0, str(ROOT / "app"))
     import query  # noqa: E402
@@ -348,6 +353,13 @@ def venn_check(df: pd.DataFrame, is_mock: bool, has_harm: bool) -> list[dict]:
     axes[0].set_ylabel("Yıl")
     fig.colorbar(im, ax=axes, label="log(1 + tespit sayısı) — iki panelde aynı ölçek", shrink=0.8)
     fig.suptitle("Hohes Venn (lon 5.95–6.25, lat 50.45–50.60) — aylık tespit takvimi", fontsize=17)
+    if burn is not None:
+        parts = []
+        for g, (y, m) in BURN_GROUPS.items():
+            for inst, r in burn.loc[g].iterrows() if g in burn.index.get_level_values(0) else []:
+                parts.append(f"{MONTH_TR[m - 1]} {y} {inst}: {r.burned_match}/{r.toplam}")
+        fig.text(0.42, 0.005, "MCD64A1 yanmış alan pikseline düşen tespitler (3×3 px, ±16 gün; destekleyici, "
+                 "bağımsız doğrulama değil): " + " · ".join(parts), ha="center", va="top", fontsize=12)
     watermark(fig, is_mock)
     fig.savefig(OUT / "venn_check.png", bbox_inches="tight")
     plt.close(fig)
@@ -417,6 +429,25 @@ def transfer_without_event(tables: dict[str, pd.DataFrame], has_harm: bool) -> d
     return out
 
 
+def burn_support() -> pd.DataFrame | None:
+    """MCD64A1 eşleşme özeti (grup × enstrüman). Yoksa None. Bağımsız doğrulama DEĞİL:
+    MCD64A1 algoritması MODIS aktif yangın verisini de kullanır (P1 notu) → sadece summary/figür notu."""
+    if not BURN_PATH.exists():
+        return None
+    b = pd.read_csv(BURN_PATH, usecols=["group", "instrument", "status"])
+    bad = set(b.status) - BURN_STATUSES
+    if bad:
+        raise ValueError(f"{BURN_PATH}: beklenmeyen status {sorted(bad)}")
+    badg = set(b.group) - set(BURN_GROUPS)
+    if badg:
+        raise ValueError(f"{BURN_PATH}: beklenmeyen group {sorted(badg)}")
+    t = b.groupby(["group", "instrument"]).status.value_counts().unstack(fill_value=0) \
+         .reindex(columns=sorted(BURN_STATUSES), fill_value=0)
+    t["toplam"] = t[sorted(BURN_STATUSES)].sum(axis=1)
+    t["bilinen"] = t.toplam - t.unknown - t.no_data   # "bilinmiyor" ≠ "yanmamış"
+    return t
+
+
 def ratio_diagnostics(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """Arjantin, ham veri: MODIS / (aktif VIIRS uydusu başına VIIRS) — yıl bazında ve 2022 aylık.
     Harmonizasyondan bağımsız: 2022 sapması (P2: harm/MODIS=1.18) kesintiden mi, yörünge kaymasından mı,
@@ -450,7 +481,7 @@ def fmt(v, spec=".2f"):
 
 
 def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown, diag,
-                  tr_ev=None) -> str:
+                  tr_ev=None, burn=None) -> str:
     def get(method, region, scale="1deg", split="test"):
         return next(r for r in rows if r["method"] == method and r["region"] == region
                     and r["split"] == split and r["scale"] == scale)
@@ -506,6 +537,19 @@ def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown,
     for v in venn:
         lines.append(f"| {v['mode']} | {v['year']}-{v['month']:02d} | {v['text']} | "
                      f"{'evet' if v['visible'] else 'hayır'} |")
+    if burn is not None:
+        lines += ["", "### Destekleyici kanıt: MCD64A1 yanmış alan (P1, `data/burned_area_check.csv`)", "",
+                  "Tespit, MCD64A1'in (aylık yanmış alan, ~500 m) ±16 gün içinde yanmış işaretlediği bir "
+                  "piksele (3×3 komşuluk ≈ 1,4 km) düşüyor mu? **Bağımsız doğrulama değildir**: MCD64A1 "
+                  "algoritması MODIS aktif yangın verisini de kullanır ve küçük yanıkları kaçırabilir. "
+                  "'bilinmiyor' (unknown/no_data) ≠ 'yanmamış'.", "",
+                  "| olay | enstrüman | eşleşti | yanmamış | başka zamanda yanık | bilinmiyor | toplam |",
+                  "|---|---|---|---|---|---|---|"]
+        for (g, inst), r in burn.iterrows():
+            y, m = BURN_GROUPS[g]
+            lines.append(f"| {MONTH_TR[m - 1]} {y} | {inst} | {r.burned_match} "
+                         f"({r.burned_match / r.toplam:.0%}) | {r.unburned} | {r.burned_other_time} | "
+                         f"{r.unknown + r.no_data} | {r.toplam} |")
 
     if not has_harm:
         text = "\n".join(lines) + "\n"
@@ -598,10 +642,11 @@ def main() -> None:
 
     plot_pred_vs_true(tables, rows, is_mock, has_harm)
     plot_annual(df, is_mock, has_harm)
-    venn = venn_check(df, is_mock, has_harm)
+    burn = burn_support()
+    venn = venn_check(df, is_mock, has_harm, burn)
     print(write_summary(rows, venn, is_mock, input_path, grid_note, k_note,
                         test_year_breakdown(df, has_harm), ratio_diagnostics(df),
-                        transfer_without_event(tables, has_harm)))
+                        transfer_without_event(tables, has_harm), burn))
 
     weak = [r for r in rows if r["method"] == "harm" and r["split"] == "test"
             and (r["r2"] is None or r["r2"] < 0.5)]
