@@ -1,6 +1,6 @@
 # P5 — Arayüz: Yusuf
 
-Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema/API **`docs/CONTRACT.md` v1.1**'de. Bu dosya sadece senin rolün.
+Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema/API **`docs/CONTRACT.md`** (güncel sürüm)'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
 - `app/app.py`
@@ -39,7 +39,7 @@ Sentetik veri `data/mock/` içinde hazır — `git pull` yeter.
 
 ## Bitti kontrolü
 - [ ] Hohes Venn seçince Nisan 2011 ve Ağustos 2026 takvimde belirgin
-- [ ] La Rioja'da Ham → Harmonize geçişte 2012/2018/2024 sıçraması kayboluyor
+- [ ] La Rioja'da Ham → Harmonize geçişte 2012/2018/2023 sıçraması kayboluyor
 - [ ] Boş bölge çizilince çökmüyor ("Bu bölgede tespit yok" mesajı)
 - [ ] Sayfa ilk açılış < 5 sn (cache)
 

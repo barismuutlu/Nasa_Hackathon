@@ -1,20 +1,21 @@
 # P1 — Veri Mühendisi: Süleyman
 
-Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md` v1.1**'de. Bu dosya sadece senin rolün.
+Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md`** (güncel sürüm)'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
 - `pipeline/ingest.py`
 - `data/sample/` (örnek çıktı)
 
 ## Girdi / çıktı (CONTRACT §7.1)
-- Girdi: `data/raw/<region>/*.csv` — klasör adı = `region` değeri (`germany`, `belgium`, `argentina`)
+- Girdi: `data/raw/<region>/*.csv` — klasör adı = `region` değeri (`argentina`, `aachen_eifel`)
 - Çıktı: `data/hotspots.parquet` — CONTRACT §1, yazmadan önce `validate_hotspots(df, "ingest")`
 - Çıktı: `data/satellite_coverage.csv` — `satellite, source, first_date, last_date, n_rows, nrt_cutoff, n_nrt_dropped`
 
 ## Görev
-1. **Veri** (CONTRACT §5) — İbrahim FIRMS ülke dosyalarını indiriyor; onunla konuş, dosyaları
-   `data/raw/germany/`, `data/raw/belgium/`, `data/raw/argentina/` altına koyun.
-   - **Belçika şart:** Hohes Venn'in büyük kısmı Belçika'da; Almanya dosyası Venn'i içermez.
+1. **Veri** (CONTRACT §5) — takımın Drive arşivi (DL_FIRE, 4 kaynak, archive + NRT, 2000-11 → bugün):
+   `data/raw/argentina/`, `data/raw/aachen_eifel/`. FIRMS ülke-yıl dosyaları KULLANILMAZ (2026 ve NOAA-21 yok).
+   - Enstrüman = `SATELLITE_INSTRUMENT[satellite]` (DL_FIRE'da VIIRS de `brightness` sütununu kullanır).
+   - archive/NRT cutoff **(region, satellite)** bazında; `satellite_coverage.csv`'ye `region` sütunu.
 2. **Okuma** — sabitleri `contract.py`'den al, kendin yazma:
    - Enstrüman sütunlardan: `brightness` → MODIS, `bright_ti4` → VIIRS.
    - `satellite` → `SATELLITE_CODES` ile; bilinmeyen kod → `ValueError`.

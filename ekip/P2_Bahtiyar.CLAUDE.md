@@ -1,6 +1,6 @@
 # P2 — Harmonizasyon: Bahtiyar
 
-Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md` v1.1**'de. Bu dosya sadece senin rolün.
+Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md`** (güncel sürüm)'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
 - `pipeline/harmonize.py`
@@ -32,7 +32,7 @@ docstring'e 5–10 satırla yaz (P3 ve P6 oradan okuyacak). Aşağıdaki Yöntem
    - Terra'nın tek MODIS olduğu dönem (2000-11 → 2002-07): harmonize seri yarı seviyede kalır →
      ya Terra ağırlığı 2 ya da takvim 2003'ten başlar. Karar 10:30 toplantısında.
 5. **Uygula: her yer** (Arjantin dışı da).
-6. **Özet yazdır** — Arjantin için yıllık ham toplam vs harmonize toplam; 2012/2018/2024 sıçraması
+6. **Özet yazdır** — Arjantin için yıllık ham toplam vs harmonize toplam; 2012/2018/2023 sıçraması
    harmonizede kayboluyor mu?
 
 ## Teslimler
@@ -45,7 +45,7 @@ docstring'e 5–10 satırla yaz (P3 ve P6 oradan okuyacak). Aşağıdaki Yöntem
 - [ ] `weight_harm` hiç NaN değil, hepsi ≥ 0
 - [ ] Arjantin 2012–2021 `Σ weight_harm` ≈ `Σ MODIS` (fark < %10)
 - [ ] k tablosunda her satırın `n_modis`, `n_viirs` değeri var; fallback'ler işaretli
-- [ ] Ham yıllık seride 2012/2018/2024 basamakları var, harmonizede yok (grafiği P6'ya at)
+- [ ] Ham yıllık seride 2012/2018/2023 basamakları var, harmonizede yok (grafiği P6'ya at)
 
 ## Claude'a not
 - `pipeline/validate.py` Oğuzhan'ın; test/metrik kodu oraya yazılmaz, buraya da yazılmaz.

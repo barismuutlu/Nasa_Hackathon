@@ -1,4 +1,4 @@
-"""Veri sözleşmesi v1.1 — sahibi P4 Barış. Belge: docs/CONTRACT.md
+"""Veri sözleşmesi v1.2 — sahibi P4 Barış. Belge: docs/CONTRACT.md
 
 Sadece SABİTLER ve DOĞRULAYICI içerir; ingest/harmonize mantığı burada YOK.
 Kullanım (pipeline/ veya app/ içinden):
@@ -16,7 +16,7 @@ import re
 
 import pandas as pd
 
-CONTRACT_VERSION = "1.1"
+CONTRACT_VERSION = "1.2"
 
 # ---------------------------------------------------------------- sabit değer kümeleri
 
@@ -42,12 +42,12 @@ VIIRS_CONFIDENCE_CLASS = {"l": "low", "n": "nominal", "h": "high",
                           "low": "low", "nominal": "nominal", "high": "high"}
 MODIS_CONFIDENCE_CUTS = (30, 80)   # <30 low, 30–79 nominal, ≥80 high
 
-# İndirme alanları = FIRMS ülke dosyaları (ülkeler çakışmaz → aynı tespit iki alanda olmaz).
-# data/raw/<slug>/ klasör adı = region değeri. Değer: ülke adı, küçük harf, ascii, boşluk yerine _.
-REGIONS: dict[str, str] = {
-    "germany": "Aachen/Eifel'in Alman tarafı",
-    "belgium": "Hohes Venn'in büyük kısmı (Nisan 2011 olayı) — Almanya dosyasında YOK",
-    "argentina": "La Rioja + P2 eğitimi",
+# İndirme alanları (FIRMS indirme aracı / DL_FIRE). Alanlar ÇAKIŞMAZ → aynı tespit iki alanda olmaz.
+# data/raw/<slug>/ klasör adı = region değeri. bbox = (lon_min, lat_min, lon_max, lat_max), None = ülke.
+# FIRMS ülke-YIL dosyaları KULLANILMAZ: 2026 ve NOAA-21 içermiyorlar.
+REGIONS: dict[str, tuple[float, float, float, float] | None] = {
+    "argentina": None,                          # ülke (La Rioja + P2 eğitimi)
+    "aachen_eifel": (5.96, 50.44, 6.44, 50.83),  # bbox, Hohes Venn dahil (Belçika tarafı da)
 }
 REGION_SLUG = re.compile(r"^[a-z0-9_]+$")
 
@@ -115,8 +115,12 @@ def empty_frame() -> pd.DataFrame:
 
 # ---------------------------------------------------------------- doğrulama
 
-def validate_hotspots(df: pd.DataFrame, stage: str = "ingest") -> None:
+def validate_hotspots(df: pd.DataFrame, stage: str = "ingest", max_rows: int | None = None) -> None:
     """Şemayı doğrular; sorun varsa TÜM sorunları listeleyen ValueError fırlatır.
+
+    max_rows: None (varsayılan) = tüm satırlar. Sayı verilirse sütun/dtype/boş değer kontrolleri yine
+    TÜM veride, satır-içi tutarlılık kontrolleri (zaman, aralık, slug…) rastgele max_rows satırda yapılır.
+    P1/P2 yazarken None kullanır; query.py okurken hız için örneklem kullanır.
 
     stage="ingest": weight_harm tamamen NaN olmalı (P1 harmonize etmez).
     stage="harm":   weight_harm NaN içermez ve ≥ 0 (P2 çıktısı).
@@ -142,11 +146,14 @@ def validate_hotspots(df: pd.DataFrame, stage: str = "ingest") -> None:
         if not nullable and s.isna().any():
             errs.append(f"{col}: {int(s.isna().sum())} boş değer (zorunlu sütun)")
         if col in CATEGORIES and str(s.dtype) == "category":
-            bad = set(s.dropna().astype(str)) - set(CATEGORIES[col])
+            used = s.cat.categories[pd.unique(s.cat.codes[s.cat.codes >= 0])]
+            bad = set(map(str, used)) - set(CATEGORIES[col])
             if bad:
                 errs.append(f"{col}: izinsiz değer {sorted(bad)}")
 
     if not errs and len(df):
+        if max_rows is not None and len(df) > max_rows:
+            df = df.sample(max_rows, random_state=0)
         inst = df["satellite"].astype(str).map(SATELLITE_INSTRUMENT)
         if (inst != df["instrument"].astype(str)).any():
             errs.append("instrument ↔ satellite uyuşmuyor")

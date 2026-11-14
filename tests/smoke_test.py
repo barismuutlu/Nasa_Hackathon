@@ -1,4 +1,4 @@
-"""Uçtan uca duman testi — sahibi P4 Barış. Sözleşme: docs/CONTRACT.md v1.1
+"""Uçtan uca duman testi — sahibi P4 Barış. Sözleşme: docs/CONTRACT.md
 
 Çalıştır (repo kökünden):  python tests/smoke_test.py
 Var olan pipeline çıktılarını sözleşmeye göre kontrol eder (olmayanlar "ATLANDI"),
@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "app"))
 
-from contract import COLUMNS, SCHEMA, validate_hotspots  # noqa: E402
+from contract import COLUMNS, CONTRACT_VERSION, SCHEMA, validate_hotspots  # noqa: E402
 import query  # noqa: E402
 
 DATA = ROOT / "data"
@@ -43,6 +43,30 @@ def expect_error(fn) -> None:
     except ValueError:
         return
     raise AssertionError("ValueError bekleniyordu")
+
+
+# ---------------------------------------------------------------- 0. ortam (herkes aynı Python + paketler)
+
+@check("ortam: Python 3.12 + requirements.txt sürümleri")
+def _():
+    from importlib.metadata import PackageNotFoundError, version
+    want_py = (ROOT / ".python-version").read_text().strip()
+    have_py = f"{sys.version_info.major}.{sys.version_info.minor}"
+    assert have_py == want_py, f"Python {have_py}, beklenen {want_py} → CLAUDE.md §4 kurulum"
+    bad = []
+    for line in (ROOT / "requirements.txt").read_text().splitlines():
+        line = line.split("#")[0].strip()
+        if "==" not in line:
+            continue
+        name, want = line.split("==")
+        try:
+            have = version(name)
+        except PackageNotFoundError:
+            have = "YOK"
+        if have != want:
+            bad.append(f"{name} {have}≠{want}")
+    assert not bad, "; ".join(bad) + " → uv pip install -r requirements.txt"
+    return f"Python {have_py}, {sum('==' in l for l in (ROOT / 'requirements.txt').read_text().splitlines())} paket"
 
 
 # ---------------------------------------------------------------- 1. doğrulayıcının kendisi
@@ -77,7 +101,7 @@ def _():
     p = DATA / "satellite_coverage.csv"
     if not p.exists():
         return "ATLANDI (henüz yok)"
-    need = {"satellite", "source", "first_date", "last_date", "n_rows", "nrt_cutoff", "n_nrt_dropped"}
+    need = {"region", "satellite", "source", "first_date", "last_date", "n_rows", "nrt_cutoff", "n_nrt_dropped"}
     missing = need - set(pd.read_csv(p, nrows=0).columns)
     assert not missing, f"eksik: {missing}"
 
@@ -134,7 +158,8 @@ def _():
 @check("query.data_info()")
 def _():
     info = query.data_info()
-    assert info["contract"] == "1.1"
+    assert info["contract"] == CONTRACT_VERSION
+    assert set(info["satellite_ranges"]) == set(info["satellites"])
     return f"{info['path']}  mock={info['is_mock']}  harm={info['has_harm']}  {info['n_rows']:,} satır"
 
 

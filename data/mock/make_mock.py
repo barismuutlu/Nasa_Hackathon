@@ -2,7 +2,7 @@
 
 Amaç: gerçek veri (P1 12:30, P2 16:30) gelene kadar app.py ve query.py geliştirilebilsin.
 Bilimsel değeri YOK. Her satırda version="MOCK". Gerçek veriyi taklit eden özellikler:
-  * Uydu eklendikçe ham sayılar sıçrar (Aqua 2002, S-NPP 2012, NOAA-20 2018, NOAA-21 2024)
+  * Uydu eklendikçe ham sayılar sıçrar (Aqua 2002, S-NPP 2012, NOAA-20 2018, NOAA-21 2023)
   * weight_harm doğru tanımla dolu (§3.3) → harmonize seride sıçrama yok
   * Hohes Venn'de Nisan 2011 (sadece MODIS) ve Ağustos 2026 (VIIRS) tespit pikleri
   * S-NPP 2026-11-02'de biter (gerçekte olduğu gibi)
@@ -31,25 +31,24 @@ SATS = {
     "Aqua": ("MODIS", "2002-07-04", None, 0.5, (13.5, 1.5)),
     "SNPP": ("VIIRS", "2012-01-20", "2026-11-02", 3.0, (13.5, 1.5)),
     "NOAA20": ("VIIRS", "2018-04-01", None, 3.0, (12.7, 0.7)),
-    "NOAA21": ("VIIRS", "2024-01-17", None, 3.0, (13.1, 1.1)),
+    "NOAA21": ("VIIRS", "2023-03-01", None, 3.0, (13.1, 1.1)),
 }
 VIIRS_START = pd.Timestamp(SATS["SNPP"][1])
 K_MOCK = 1 / 3.0  # MODIS / VIIRS (tek uydu) — gerçek değeri P2 hesaplayacak
 
 # üretim kutusu: bbox (lon_min, lat_min, lon_max, lat_max), aylık taban (MODIS-eşdeğeri), mevsim çarpanları Oca..Ara
-# region değeri sonradan ülkeye çevrilir (assign_country): eifel → belgium/germany (yaklaşık sınır),
-# argentina → argentina (gerçekte tüm ülke; sentetikte sadece La Rioja kutusu üretiliyor)
+# anahtar = region değeri (contract.REGIONS). "argentina" gerçekte tüm ülke; sentetikte sadece La Rioja kutusu.
 REGIONS = {
     "argentina": ((-69.7, -31.9, -65.4, -27.6), 40.0,
                   [1.0, 0.8, 0.6, 0.4, 0.3, 0.4, 0.8, 1.6, 2.4, 2.6, 2.0, 1.4]),
-    "eifel": ((5.9, 50.2, 7.0, 50.9), 1.5,
+    "aachen_eifel": ((5.96, 50.44, 6.44, 50.83), 1.5,
                      [0.3, 0.4, 1.2, 1.5, 0.8, 0.6, 0.9, 1.0, 0.6, 0.3, 0.2, 0.2]),
 }
 
 # sentetik tespit kümeleri: (region, merkez lon, lat, başlangıç, bitiş, toplam MODIS-eşdeğeri tespit)
 EVENTS = [
-    ("eifel", 6.08, 50.52, "2011-04-24", "2011-04-28", 120.0),  # Hohes Venn, Nisan 2011
-    ("eifel", 6.10, 50.50, "2026-08-10", "2026-08-15", 90.0),   # Hohes Venn, Ağustos 2026
+    ("aachen_eifel", 6.08, 50.52, "2011-04-24", "2011-04-28", 120.0),  # Hohes Venn, Nisan 2011
+    ("aachen_eifel", 6.10, 50.50, "2026-08-10", "2026-08-15", 90.0),   # Hohes Venn, Ağustos 2026
 ]
 
 
@@ -117,13 +116,8 @@ def generate_counts() -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True)
 
 
-BE_DE_BORDER_LON = 6.15   # sentetik için yaklaşık Belçika/Almanya sınırı (Hohes Venn batıda → belgium)
-
-
 def add_attributes(df: pd.DataFrame) -> pd.DataFrame:
     n = len(df)
-    eifel = df["region"] == "eifel"
-    df.loc[eifel, "region"] = np.where(df.loc[eifel, "longitude"] < BE_DE_BORDER_LON, "belgium", "germany")
     df["acq_date"] = pd.to_datetime(df["acq_date"]).dt.normalize()
     df["instrument"] = df["satellite"].map({s: v[0] for s, v in SATS.items()})
     is_modis = (df["instrument"] == "MODIS").to_numpy()
