@@ -5,6 +5,7 @@ P6 İbrahim · 14 Kasım 2026 · Güncel sözleşme v1.3.
 ## Kaynak ve doğrulama düzeyi
 
 - P1 Süleyman: kullanıcı tarafından iletilen coğrafi filtre, ham sayımlar, Nisan kapsamı ve MCD64A1 kontrolü; ilk referans `7ddfc51`, yeni teslim `26fa38d`. Ağustos harmonize aylık toplamı daha hassas gösterimle 169,2 olarak iletildi.
+- P1 son inceleme (`9c8abb9` referanslı mesaj): Nisan geçişleri ve taban tablosu, Ağustos toplamları/harmonize tahmin, MCD64A1 sayıları/tarihleri/duyarlılığı ve La Rioja yıllıkları veriden tek tek kontrol edilmiş; sayısal fark bildirilmemiştir. Bu P1'in kontrol raporudur; P6'nın yerel tekrar hesabı değildir.
 - P5 Yusuf: AppTest + query API ile T01–T10 sonuçları; bildirilen uygulama referansı `2bc0e31`. T08 elle, T06 benzetimle test edilmiş. Bu kayıtlar P6'nın yerel tekrar testi değildir; uygulama commit'i veri dosyasının sürümünü tek başına tanımlamaz.
 - P4 Barış: `f0f0759` tesliminde tam harmonize veriyle sorgulanan Hohes Venn ve La Rioja sayıları. P2 uygulaması `f44bca1` ile gelmiş.
 - P3 Oğuzhan: `b4cbbd4` ile gelen [metrics.json](../validation/metrics.json), [summary.md](../validation/summary.md) ve gerçek veri grafikleri; `c6f15ad` ile MCD64A1 destekleyici özeti eklendi. Aşağıdaki test metrikleri doğrudan JSON kayıtlarından alınmıştır.
@@ -69,7 +70,7 @@ Sunum cümlesi:
 
 > Nisan 2011'deki 17 MODIS tespitinin 9'u, 3×3 piksel komşuluğunda (yaklaşık 1,4 km), NASA'nın MCD64A1 ürününün 24–28 Nisan'da yanmış işaretlediği alanlarla örtüşüyor. Bu destekleyici kanıttır; bağımsız doğrulama değildir.
 
-MCD64A1 algoritması MODIS aktif yangın verisini de kullanır; küçük yanıkları kaçırabilir. “Doğrulandı” veya “kanıtlandı” denmez. Nisan eşleşmesi ayara bağlıdır: tek pikselde 5/17, 3×3'te 9/17, 5×5'te 15/17 (P1 bildirimi; zaman toleransı ±16 gün). P1 kalan 8 tespitin yanık kenarında olduğunu bildirdi; eşleşmeme, yanlış aktif tespit kanıtı değildir. `unknown` / `no_data`, “yanmamış” ile aynı değildir. Bu örtüşme oranları bağımsız sınıflandırma doğruluğu veya harmonizasyon test metriği olarak sunulmaz.
+MCD64A1 algoritması MODIS aktif yangın verisini de kullanır; küçük yanıkları kaçırabilir. “Doğrulandı” veya “kanıtlandı” denmez. Nisan eşleşmesi ayara bağlıdır: tek pikselde 5/17, 3×3'te 9/17, 5×5'te 15/17 (P1 bildirimi; zaman toleransı ±16 gün). P1'in son konum açıklamasına göre kalan 8 tespit, eşleşenlerin güney/doğu çevresindedir; 5×5 komşulukta bu 8 tespitin 6'sı daha eşleşir. Yanık sınırı haritasıyla ölçüm yapılmadığından bunlar “yanık kenarında” diye tanımlanmaz. Eşleşmeme, yanlış aktif tespit kanıtı değildir. `unknown` / `no_data`, “yanmamış” ile aynı değildir. Bu örtüşme oranları bağımsız sınıflandırma doğruluğu veya harmonizasyon test metriği olarak sunulmaz.
 
 Eski Belçika ülke-yıl dosyasındaki 17 satırla yeni DL_FIRE çıktısının aynı olması, P1'in bildirdiği **iki FIRMS indirmesi arasında tutarlılık kontrolüdür**; bağımsız sensör veya yangın olayı doğrulaması değildir.
 
