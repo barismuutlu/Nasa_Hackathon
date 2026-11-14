@@ -169,7 +169,17 @@ fy.add_trace(go.Scatter(x=raw_y.index, y=raw_y.values, name="Ham / Raw", mode="l
 if harm_y.notna().any():
     fy.add_trace(go.Scatter(x=harm_y.index, y=harm_y.values, name="Harmonize / Harmonized",
                             mode="lines+markers", line=dict(color="#35b779", width=3)))
-for xv, lbl in [(2012.0, "S-NPP"), (2018.25, "NOAA-20"), (2024.0, "NOAA-21"), (2026.83, "S-NPP bitti / ended")]:
+def _frac_year(ts):
+    return ts.year + (ts.dayofyear - 1) / 365.25
+
+
+# uydu geçiş tarihleri veriden (CONTRACT v1.2 §3) — sabit yazılmaz
+_ranges = INFO.get("satellite_ranges", {})
+_marks = [(_frac_year(_ranges[s][0]), lbl) for s, lbl in
+          [("SNPP", "S-NPP"), ("NOAA20", "NOAA-20"), ("NOAA21", "NOAA-21")] if s in _ranges]
+if "SNPP" in _ranges and _ranges["SNPP"][1] < INFO["end"] - pd.Timedelta(days=3):
+    _marks.append((_frac_year(_ranges["SNPP"][1]), "S-NPP bitti / ended"))
+for xv, lbl in _marks:
     fy.add_vline(x=xv, line_dash="dash", line_color="#888", annotation_text=lbl,
                  annotation_position="top left")
 fy.update_layout(height=380, margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified",
