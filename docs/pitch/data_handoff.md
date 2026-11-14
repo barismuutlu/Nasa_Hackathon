@@ -1,13 +1,34 @@
-# P6 veri indirme durumu — cloud kaydı ve sözleşme v1.3
+# P6 veri teslim durumu — güncel DL_FIRE ve tarihsel arşiv
 
 Cloud kaynağı: `P6_ibrahim.patch`, referans `8d5894c`, 14 Kasım 2026, sözleşme v1.2. Mevcut yerel sözleşme v1.3'tür; DL_FIRE ve ülke-yıl girdilerini dışlama kuralları değişmemiştir.
 
-Bu belgedeki indirme, boyut, SHA-256, ZIP ve Python kontrol sonuçları önceki cloud oturumunun raporudur. CSV ve ZIP dosyaları patch'in içinde değildir; bu Windows çalışma alanında aynı kontroller yeniden çalıştırılmadı. Aşağıdaki “çalışma alanı” ifadeleri cloud oturumunu anlatır. Yerel durum [test_notes.md](test_notes.md) içinde ayrı tutulur.
+Tarihsel indirme, boyut, SHA-256, ZIP ve Python kontrol sonuçları önceki cloud oturumunun raporudur. CSV ve ZIP dosyaları patch'in içinde değildir; bu Windows çalışma alanında aynı kontroller yeniden çalıştırılmadı. Güncel P1/P4/P5 teslimi aşağıda ayrı kaydedilmiştir. P6 yerel durumu [test_notes.md](test_notes.md) içindedir.
 
 **Önceki v1.1 ülke-yıl teslimi güncel pipeline girdisi değildir.**
 `docs/CONTRACT.md` v1.2 §3 ve §5, ülke-yıl dosyalarını kapsam dışında bırakır.
 Önceki 144 CSV ve ZIP korunmuştur; bu not bunları tarihsel indirme arşivi olarak
 kaydeder. Kaynak `data_download_manifest.csv` de aynı tarihsel arşivi tanımlar.
+
+## Güncel teslim — P1 tarafında tamamlandı
+
+Kaynak: Süleyman'ın `26fa38d` referanslı mesajı. P1 makinesinde `data/raw/` altında yalnız şu DL_FIRE ZIP girdilerinin bulunduğu ve ülke-yıl CSV'si olmadığı bildirildi:
+
+| Alan | P1'de bildirilen girdi |
+|---|---|
+| argentina | `data/raw/argentina/Argentina-20261114T101801Z-1-001.zip` |
+| aachen_eifel | `data/raw/aachen_eifel/Aachen-Eifel-20261114T101746Z-1-001.zip` |
+
+Dört kaynak, archive + NRT; Aachen/Eifel indirme kutusu `(5.96, 50.44, 6.44, 50.83)`. Çıktı `data/hotspots.parquet`: 7.082.663 satır, 2000-11-01 → 2026-11-13. Barış'ın Drive'dan alıp kontrol ettiği, Yusuf'un gerçek veriyle uygulama testini yaptığı bildirildi. **P1 teslimi tamamdır; bu durum P6 makinesinde tam verinin bulunduğu veya yeniden test edildiği anlamına gelmez.**
+
+P1 tam harmonize çıktısında Hohes Venn Nisan 2011=17,0 ve Ağustos 2026=169,2 MODIS-eşdeğeri; Nisan kartı 2001–2026'daki 26 Nisan içinde 1., diğer 25 Nisan ortalaması ≈0,59 ve oran ≈29×. Ayrıntılar [pitch_facts.md](pitch_facts.md) içinde; aktif tespitlerin Ağustos tarihleri 14–17 olarak teyit edildi.
+
+## Tarihsel arşivi ingest girdisinden ayrı tut
+
+Tarihsel ülke-yıl ZIP'i ve açılmış CSV'leri **`data/raw/` dışında**, örneğin `data/archive/` altında tut; git'e ekleme. Bu belge kapsamında hiçbir ham dosya taşınmadı veya silinmedi. Eski manifest ve paket kaydındaki `data/raw/...` yolları cloud'da bildirilen tarihsel konumlardır; güncel yerleştirme talimatı değildir.
+
+- `data/raw/` kökündeki ZIP (ör. `firms_country_archives_2000_2025.zip`) ingest'in bölge-klasörü kontrolünde açık hataya yol açar.
+- `data/raw/belgium/` gibi bir alt klasöre açılmış ülke-yıl CSV'leri ise taranır; uyarı basılması bunları otomatik dışlamaz. “Uygulama zaten reddeder” varsayımıyla burada tutulmamalıdır.
+- Geçerli DL_FIRE ZIP'leri yukarıdaki `argentina` ve `aachen_eifel` bölge klasörlerinde kalır. Bu davranış `pipeline/ingest.py` kaynak kodundan okundu; ingest bu makinede çalıştırılmadı.
 
 ## Geçerli girdi
 
@@ -20,13 +41,7 @@ kaydeder. Kaynak `data_download_manifest.csv` de aynı tarihsel arşivi tanımla
 - DL_FIRE VIIRS başlıkları da `brightness/bright_t31` olabilir;
   enstrüman sütun adından değil uydu kodundan belirlenir.
 
-Takımın Drive arşivi bu biçimdedir; bu çalışma alanına henüz aktarılmadı.
-Süleyman, kanonik `data/hotspots.parquet` üzerinden Nisan 2011 ve Ağustos 2026
-pitch sayılarını doğruladı. Ekibin ilettiği gerçek sonuçlar `pitch_facts.md`
-içindedir; burada yerel parquet kontrolü yapıldığı iddia edilmez.
-Mevcut ülke-yıl CSV dosyalarının yolu aynı `data/raw/` ağacı altında olsa da
-bunlar v1.2 girdisi olarak tüketilmemelidir. DL_FIRE arşivi yerleştirilmeden
-önce eski ülke-yıl dosyaları ayrı bir çalışma arşivine alınmalıdır.
+Takımın Drive arşivi bu biçimdedir ve P1/P4 teslimi yukarıdaki bildirime göre tamamlanmıştır. P6'nın bu Windows çalışma alanında tam parquet aktarımı ve runtime tekrarı henüz yapılmadı. Süleyman'ın kanonik parquet üzerinden teyit ettiği sayılar kaynak atfıyla kullanılır; burada yerel parquet kontrolü yapıldığı iddia edilmez.
 
 ## Tarihsel ülke-yıl indirmesi (v1.1)
 
@@ -72,19 +87,18 @@ güncel DL_FIRE pipeline kontrolü veya bilimsel doğrulama değildir.
 
 ## Tarihsel aktarım paketi
 
-`data/raw/firms_country_archives_2000_2025.zip`: 145.340.525 bayt.
+Cloud'da bildirilen eski konum `data/raw/firms_country_archives_2000_2025.zip`: 145.340.525 bayt. Güncel saklama önerisi `data/archive/firms_country_archives_2000_2025.zip`; ZIP ve içindeki ülke-yıl CSV'leri `data/raw/` altında tutulmaz.
 ZIP bütünlük kontrolü geçti. SHA-256: `data_transfer_package.json`.
 Paket v1.1 arşividir; güncel v1.3 girdi klasörlerine açılmamalıdır. ZIP içindeki eski
 yerleştirme yönergelerinin yerine bu not geçerlidir.
-Drive/USB aktarımı yapılmadı; hiçbir raw CSV veya ZIP git içine eklenmedi.
+Bu tarihsel paket için cloud raporunda Drive/USB aktarımı yapılmadığı yazılıydı; bu ifade güncel DL_FIRE tesliminin eksik olduğu anlamına gelmez. Hiçbir raw CSV veya ZIP bu belge değişikliğiyle git'e eklenmedi.
 
 ## Cloud oturumunun kapanış durumu / aktarılacak bilgi
 
 - Ortam kuruldu: Python 3.12.14, sabit paket sürümleri.
 - Smoke test: 7 geçti, 6 atlandı, 0 hata; query kontrolleri sentetik veride.
 - Ortam raporu: `environment_check.md`.
-- P1'in kanonik parquet üzerinden doğruladığı Ağustos 2026 sayıları pitch'e işlendi:
-  105 MODIS, 1.794 VIIRS. Harmonize sayı `[TBD — Bahtiyar]`.
-- Yerel DL_FIRE/parquet aktarımı ve tam kapsam kontrolleri halen bekleniyor.
+- Cloud kapanışında harmonize sayı bekleniyordu. Sonraki P1 tesliminde Nisan 17,0; Ağustos 169,2 MODIS-eşdeğeri olarak bildirildi; ham Ağustos 105 MODIS + 1.794 VIIRS.
+- Cloud kapanışında bekleyen DL_FIRE/parquet teslimi P1/P4 tarafında sonradan tamamlandı; P6 yerel aktarım ve runtime kontrolü ayrı, halen bekliyor.
 - `2026 Judging Criteria.docx` çalışma alanında bulunamadı; taşıma yapılmadı.
 - Kod ve sözleşme değiştirilmedi; P6 değişiklikleri `docs/pitch/` altındadır.
