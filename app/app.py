@@ -1,5 +1,6 @@
 """P5 — Streamlit UI: MODIS ↔ VIIRS active fire detection calendar (English-only, scientific layout)."""
 import json
+from pathlib import Path
 
 import folium
 import numpy as np
@@ -23,6 +24,7 @@ C_RAW, C_HARM = "#440154", "#21918c"  # viridis ends, used consistently for the 
 FIRE_SCALE = [[0.0, "#fff7c2"], [0.25, "#ffd84a"], [0.5, "#fe9b2d"], [0.75, "#d93806"], [1.0, "#7a0403"]]
 C_FRAME = "#ff9f1c"  # region frame on satellite imagery
 C_NODATA = "#34322e"  # calendar background (no data)
+LOGO = Path(__file__).parent / "assets" / "firewatch_logo.png"  # transparent PNG, sits on the page background
 
 st.set_page_config(page_title="Active Fire Detection Calendar", page_icon=":material/local_fire_department:",
                    layout="wide")
@@ -31,6 +33,7 @@ st.markdown("""<style>
 .abstract {color: #c9c3b8; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .2rem 0;}
 .facts {color: #a39d92; font-size: .92rem; line-height: 1.5; max-width: 980px; margin: 0 0 .8rem 0;}
 .facts b {color: #ece7de; font-weight: 600;}
+.subtitle {color: #a39d92; font-size: 1.0rem; margin: -.5rem 0 1rem 0;}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
@@ -93,7 +96,8 @@ def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=Tr
 # ---------- Header ----------
 if INFO.get("is_mock"):
     st.warning("SYNTHETIC TEST DATA — not for interpretation")
-st.title("Active Fire Detection Calendar, 2000–2026")
+st.image(str(LOGO), width=440)
+st.markdown('<div class="subtitle">Active Fire Detection Calendar, 2000–2026</div>', unsafe_allow_html=True)
 
 st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
