@@ -11,6 +11,7 @@ import streamlit as st
 from folium.plugins import Draw, HeatMap
 from streamlit_folium import st_folium
 
+import query
 from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes, forecast
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -26,6 +27,7 @@ FIRE_SCALE = [[0.0, "#fff7c2"], [0.25, "#ffd84a"], [0.5, "#fe9b2d"], [0.75, "#d9
 C_FRAME = "#ff9f1c"  # region frame on satellite imagery
 C_DRAWN = "#21918c"  # user-drawn area: teal stays visible on top of the orange heat layer
 C_NODATA = "#34322e"  # calendar background (no data)
+FC_RATIO = getattr(query, "FORECAST_RATIO", 1.5)  # outlook: ratio ≥ 1.5 → above normal, ≤ 1/1.5 → below
 BACKTEST_PNG = Path(__file__).resolve().parents[1] / "docs" / "forecast" / "backtest.png"  # P4, pipeline/forecast.py
 LOGO = Path(__file__).parent / "assets" / "firewatch_logo.png"  # transparent PNG, sits on the page background
 
@@ -64,7 +66,10 @@ st.markdown("""<style>
                            text-decoration-color: #6f6a61;}
 .st-key-sitefooter button:hover {color: #e8833a;}
 .footnote {color: #a39d92; font-size: .88rem; margin-top: .2rem; text-align: center;}
-.outlook {color: #ece7de; font-size: 1.15rem; line-height: 1.5; margin: -.2rem 0 .7rem 0;}
+.ol-when {color: #a39d92; font-size: .95rem;}
+.ol-label {color: #e8833a; font-size: 2.1rem; font-weight: 700; line-height: 1.2; margin: .1rem 0 .4rem 0;}
+.ol-num {color: #c9c3b8; font-size: .98rem; line-height: 1.55;}
+.ol-num b {color: #ece7de;}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
@@ -544,13 +549,46 @@ def outlook_section(geom_key):
         st.markdown('<div class="facts">Outlook available for Argentina only (model calibrated there).</div>',
                     unsafe_allow_html=True)
         return
-    st.markdown(
-        f'<div class="outlook">{fc["start"]:%d %b} – {fc["end"]:%d %b %Y}: <b>≈{fc["pred"]:,.0f}</b> MODIS-eq. '
-        f'detections (80% range {fc["p10"]:,.0f}–{fc["p90"]:,.0f}); normal {fc["normal"]:,.0f} '
-        f'→ <b>{fc["label"]}</b></div>'
-        f'<div class="figcap">EXPERIMENTAL · detection outlook, not a fire forecast · backtest '
-        f'{fc["backtest_years"][0]}–{fc["backtest_years"][1]}: direction right {fc["direction_hit_rate"]:.0%} · '
-        f'data through {fc["data_through"]:%d %b %Y} · {fc["n_cells"]} 1° cells</div>', unsafe_allow_html=True)
+    pred, p10, p90, normal = fc["pred"], fc["p10"], fc["p90"], fc["normal"]
+    lo, hi = normal / FC_RATIO, normal * FC_RATIO          # "near normal" band (same threshold as query.forecast)
+    x_max = max(p90, hi) * 1.3
+    c_txt, c_fig = st.columns([1, 2.4], vertical_alignment="center")
+    c_txt.markdown(
+        f'<div class="ol-when">{fc["start"]:%d %b} – {fc["end"]:%d %b %Y}</div>'
+        f'<div class="ol-label">{fc["label"].capitalize()}</div>'
+        f'<div class="ol-num">≈<b>{pred:,.0f}</b> MODIS-eq. detections expected<br>'
+        f'normal for these 30 days: <b>{normal:,.0f}</b> ({fc["ratio"]:.1f}× normal)</div>', unsafe_allow_html=True)
+    fo = go.Figure()
+    # three zones behind the estimate: below / near / above normal
+    for x0, x1, name, fill in [(0, lo, "below normal", "#262422"), (lo, hi, "near normal", "#34322e"),
+                               (hi, x_max, "above normal", "#262422")]:
+        fo.add_shape(type="rect", x0=x0, x1=x1, y0=0, y1=1, fillcolor=fill, line_width=0, layer="below")
+        fo.add_annotation(x=(x0 + x1) / 2, y=1.0, yanchor="bottom", text=name, showarrow=False,
+                          font=dict(size=12, color="#a39d92"))
+    fo.add_shape(type="line", x0=normal, x1=normal, y0=0, y1=1, line=dict(color=C_RAW, width=2, dash="dot"))
+    fo.add_annotation(x=normal, y=0.97, yanchor="top", xanchor="left", xshift=5, text=f"normal {normal:,.0f}",
+                      showarrow=False, font=dict(size=12, color=C_RAW))
+    fo.add_shape(type="rect", x0=p10, x1=p90, y0=0.36, y1=0.64, fillcolor="rgba(232,131,58,0.35)",
+                 line=dict(color=C_HARM, width=1))
+    fo.add_trace(go.Scatter(x=[pred], y=[0.5], mode="markers+text", text=[f"expected ≈{pred:,.0f}"],
+                            textposition="bottom center", textfont=dict(color="#ece7de", size=13),
+                            marker=dict(color=C_HARM, size=16, line=dict(color="#1d1c1a", width=2)),
+                            hovertemplate=f"expected ≈{pred:,.0f}<br>80% range {p10:,.0f}–{p90:,.0f}<extra></extra>"))
+    for xv, anchor in ((p10, "right"), (p90, "left")):
+        fo.add_annotation(x=xv, y=0.5, xanchor=anchor, xshift=-6 if anchor == "right" else 6, text=f"{xv:,.0f}",
+                          showarrow=False, font=dict(size=12, color=C_HARM))
+    fo.update_layout(height=190, margin=dict(l=10, r=10, t=28, b=40), showlegend=False, dragmode=False,
+                     template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                     font=dict(family='"Source Sans Pro", "Source Sans 3", sans-serif', size=13, color="#a39d92"),
+                     xaxis=dict(range=[0, x_max], fixedrange=True, showgrid=False, zeroline=False, ticks="",
+                                title=dict(text="MODIS-eq. detections in the 30-day window", standoff=22)),
+                     yaxis=dict(range=[0, 1], visible=False, fixedrange=True))
+    c_fig.plotly_chart(fo, width="stretch", theme=None, config={"displayModeBar": False, "doubleClick": False})
+    figcap(4, "30-day detection outlook.",
+           f"Dot: expected value; orange bar: 80% range ({p10:,.0f}–{p90:,.0f}); dotted line: 10-year normal for the "
+           f"same 30 days. EXPERIMENTAL · a detection outlook, not a fire forecast · backtest "
+           f"{fc['backtest_years'][0]}–{fc['backtest_years'][1]}: direction right {fc['direction_hit_rate']:.0%} · "
+           f"data through {fc['data_through']:%d %b %Y} · {fc['n_cells']} 1° cells.")
 
 
 # ---------- Annual totals (fragment) ----------
