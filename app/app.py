@@ -220,10 +220,10 @@ st.markdown(f'<div class="sitebar"><img alt="FireWatch" src="data:image/png;base
 
 # ---------- Info page instead of the calendar ----------
 _page = st.query_params.get("page")
+for _k in KEEP:  # every run, before the widgets: otherwise a re-mounted widget shows its first option
+    if _k in st.session_state:
+        st.session_state[_k] = st.session_state[_k]
 if _page in PAGES:
-    for _k in KEEP:
-        if _k in st.session_state:
-            st.session_state[_k] = st.session_state[_k]
     st.button("← Back to the calendar", type="tertiary", on_click=open_page)
     st.header(PAGES[_page][0])
     PAGES[_page][1]()
@@ -480,10 +480,8 @@ def calendar_and_anomaly(df, mode, d0, d1):
     a = anomaly(mat, yr, mo)
     val, mean = a.get("value"), a.get("mean")
     ratio = val / mean if (fmt(val) != "–" and fmt(mean) != "–" and mean > 0) else None
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k3, k4, _ = st.columns(4)
     k1.metric("Detections" if mode == "raw" else "MODIS-eq.", fmt(val))
-    k2.metric("Rank", f"{a['rank']}/{a['n_years']}" if a.get("rank") is not None else "–",
-              help="1 = highest year for this calendar month")
     if ratio is not None and mean < LOW_MEAN and ratio >= MAX_RATIO:
         k3.metric("Typical month", f"≈{mean:.1f}", "baseline ≈0 per month", delta_color="off")
     else:
