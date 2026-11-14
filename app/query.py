@@ -1,7 +1,7 @@
 """Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4.
 
 P5 (app.py) parquet'i doğrudan okumaz; sadece bu modülü kullanır:
-    from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes, forecast
+    from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes, forecast, seasonal_outlook
 
 Bu modül Streamlit'e bağımlı değildir (pipeline/ ve testlerden de kullanılabilir).
 Önbellekleme (st.cache_data) app.py'nin işidir; burada sadece dosya okuması önbellekli.
@@ -219,59 +219,110 @@ def to_csv_bytes(df: pd.DataFrame) -> bytes:
 
 # ---------------------------------------------------------------- deneysel 30 günlük görünüm (v1.5)
 
-FORECAST_PATH = ROOT / "data" / "deploy" / "forecast.parquet"     # pipeline/forecast.py (P4)
+FORECAST_PATH = ROOT / "data" / "deploy" / "forecast.parquet"            # pipeline/forecast.py (P4)
+FORECAST_HISTORY = ROOT / "data" / "deploy" / "forecast_history.parquet"
 FORECAST_METRICS = ROOT / "docs" / "forecast" / "metrics.json"
 FORECAST_RATIO = 1.5    # oran ≥ 1.5 → "above normal", ≤ 1/1.5 → "below normal", arası "near normal"
+PROFILE_YEARS = 10      # mevsim profili ve mevsimsel normal: son 10 tam yıl
 
 
 @lru_cache(maxsize=2)
-def _load_forecast(path_str: str, mtime: float) -> tuple[pd.DataFrame, dict]:
+def _load_forecast(path_str: str, mtime: float) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
     import json
     f = pd.read_parquet(path_str, engine="pyarrow")
-    if not FORECAST_METRICS.exists():
-        raise FileNotFoundError(f"{FORECAST_METRICS} yok — python pipeline/forecast.py")
-    return f, json.loads(FORECAST_METRICS.read_text(encoding="utf-8"))
+    if not (FORECAST_METRICS.exists() and FORECAST_HISTORY.exists()):
+        raise FileNotFoundError("docs/forecast/metrics.json ya da forecast_history.parquet yok — python pipeline/forecast.py")
+    h = pd.read_parquet(FORECAST_HISTORY, engine="pyarrow")
+    return f, h, json.loads(FORECAST_METRICS.read_text(encoding="utf-8"))
+
+
+def _same_window(year: int, start: pd.Timestamp) -> pd.Timestamp:
+    try:
+        return start.replace(year=year)
+    except ValueError:                                  # 29 Şubat
+        return start.replace(year=year, day=28)
+
+
+def _seasonal_profile(df: pd.DataFrame, last_full_year: int) -> pd.Series:
+    """Takvim ayı → son PROFILE_YEARS tam yılın aylık ortalaması (MODIS-eşd. ya da ham sayı)."""
+    mode = "harm" if df["weight_harm"].notna().any() else "raw"
+    mat = monthly_matrix(df, mode)
+    rows = mat.loc[(mat.index > last_full_year - PROFILE_YEARS) & (mat.index <= last_full_year)]
+    prof = rows.mean().reindex(range(1, 13)).fillna(0.0)
+    prof.index.name = "month"
+    return prof.rename("normal")
 
 
 def forecast(geom) -> dict[str, Any] | None:
-    """Deneysel 30 günlük tespit görünümü (CONTRACT §7.5). Bölgede görünüm hücresi yoksa None.
+    """Deneysel 30 günlük tespit görünümü (CONTRACT §7.5) — test edilmiş model, sadece Arjantin.
 
-    Hücre seçimi: 1° hücre MERKEZİ bölgenin içindeyse. Sadece Arjantin; hotspot dosyasından bağımsız.
-    Bölge toplamı = (Σ expected_geo / Σ normal_geo) × Σ normal  (pipeline/forecast.py ile aynı hesap).
+    Bölgede görünüm hücresi yoksa (1° hücre MERKEZİ geom içinde) None → uygulama seasonal_outlook(geom)'a düşer.
+    Bölge toplamı = (Σ expected_geo / Σ normal_geo) × Σ normal (pipeline/forecast.py ile aynı hesap).
     """
+    r = _outlook(geom)
+    return r if r is not None and r["mode"] == "model" else None
+
+
+def seasonal_outlook(geom) -> dict[str, Any] | None:
+    """Model olmayan bölgeler için (ör. Hohes Venn) aynı 30 günlük pencerenin MEVSİMSEL NORMALİ — TAHMİN DEĞİL.
+
+    pred = normal; "history" (geçmiş yıllar) ve "profile" (12 ay) grafik için. Bölgede hiç veri yoksa None.
+    Model bölgesinde (Arjantin) de çağrılabilir: o zaman forecast() sonucunu döndürür (mode="model").
+    """
+    return _outlook(geom)
+
+
+def _outlook(geom) -> dict[str, Any] | None:
+    """forecast() / seasonal_outlook() ortak hesabı. mode = "model" | "seasonal"."""
     if not FORECAST_PATH.exists():
         return None
-    f, meta = _load_forecast(str(FORECAST_PATH), FORECAST_PATH.stat().st_mtime)
+    f, h, meta = _load_forecast(str(FORECAST_PATH), FORECAST_PATH.stat().st_mtime)
     (lon_min, lat_min, lon_max, lat_max), poly = _parse_geom(geom)
     m = f["cell_lon"].between(lon_min, lon_max) & f["cell_lat"].between(lat_min, lat_max)
     if poly is not None:
         m &= shapely.contains_xy(poly, f["cell_lon"].to_numpy(), f["cell_lat"].to_numpy())
     cells = f.loc[m].reset_index(drop=True)
-    if cells.empty:
+    start, end, data_through = f["start"].iloc[0], f["end"].iloc[0], f["data_through"].iloc[0]
+    last_full_year = start.year - 1
+    det = get_hotspots(geom)
+    base = {"start": start, "end": end, "data_through": data_through,
+            "profile": _seasonal_profile(det, last_full_year) if len(det) else pd.Series(
+                0.0, index=pd.RangeIndex(1, 13, name="month"), name="normal")}
+
+    if not cells.empty:                                           # ---- model modu (Arjantin)
+        ratio = float(cells["expected_geo"].sum() / cells["normal_geo"].sum())
+        normal = float(cells["normal"].sum())
+        pred = ratio * normal
+        sc = meta["scopes"]["la_rioja" if len(cells) < meta["small_selection_cells"] else "argentina"]
+        label = ("above normal" if ratio >= FORECAST_RATIO else
+                 "below normal" if ratio <= 1 / FORECAST_RATIO else "near normal")
+        hist = (h.merge(cells[["cell_lat", "cell_lon"]], on=["cell_lat", "cell_lon"])
+                .groupby("year")["detections"].sum())
+        cells = cells.assign(ratio=(cells["expected_geo"] + 1) / (cells["normal_geo"] + 1))  # harita, yumuşatılmış
+        return {**base, "mode": "model", "pred": pred,
+                "p10": float(np.expm1(np.log1p(pred) + sc["err_log_p10"])),
+                "p90": float(np.expm1(np.log1p(pred) + sc["err_log_p90"])),
+                "normal": normal, "ratio": ratio, "label": label, "n_cells": len(cells),
+                "skill": meta["skill_vs_normal"], "direction_hit_rate": meta["direction_hit_rate"],
+                "backtest_years": tuple(meta["test_years"]),
+                "history": hist.rename("detections"), "cells": cells}
+
+    if det.empty:                                                 # bu alan için hiç veri indirilmedi
         return None
-    ratio = float(cells["expected_geo"].sum() / cells["normal_geo"].sum())
-    normal = float(cells["normal"].sum())
-    pred = ratio * normal
-    scope = "la_rioja" if len(cells) < meta["small_selection_cells"] else "argentina"
-    sc = meta["scopes"][scope]
-    if ratio >= FORECAST_RATIO:
-        label = "above normal"
-    elif ratio <= 1 / FORECAST_RATIO:
-        label = "below normal"
-    else:
-        label = "near normal"
-    cells = cells.assign(ratio=(cells["expected_geo"] + 1) / (cells["normal_geo"] + 1))  # harita için, yumuşatılmış
-    return {
-        "start": cells["start"].iloc[0], "end": cells["end"].iloc[0],
-        "data_through": cells["data_through"].iloc[0],
-        "pred": pred,
-        "p10": float(np.expm1(np.log1p(pred) + sc["err_log_p10"])),
-        "p90": float(np.expm1(np.log1p(pred) + sc["err_log_p90"])),
-        "normal": normal, "ratio": ratio, "label": label, "n_cells": len(cells),
-        "skill": meta["skill_vs_normal"], "direction_hit_rate": meta["direction_hit_rate"],
-        "backtest_years": tuple(meta["test_years"]),
-        "cells": cells,
-    }
+    w = det["weight_harm"] if det["weight_harm"].notna().any() else pd.Series(1.0, index=det.index)
+    years = range(int(det["year"].min()) + 1, start.year)           # ilk yıl kısmi olabilir
+    hist = pd.Series({y: float(w[det["acq_date"].between(_same_window(y, start),
+                                                         _same_window(y, start) + pd.Timedelta(days=29))].sum())
+                      for y in years}, name="detections")
+    hist.index.name = "year"
+    normal = float(hist.loc[hist.index > last_full_year - PROFILE_YEARS].mean())
+    return {**base, "mode": "seasonal", "pred": normal,
+            "p10": float(hist.quantile(0.1)), "p90": float(hist.quantile(0.9)),
+            "normal": normal, "ratio": float("nan"),
+            "label": "quiet season" if normal < 1 else "seasonal normal",
+            "n_cells": 0, "skill": None, "direction_hit_rate": None, "backtest_years": None,
+            "years_with_detections": int((hist > 0).sum()), "n_years": len(hist),
+            "history": hist, "cells": cells}
 
 
 # ---------------------------------------------------------------- hızlı kontrol

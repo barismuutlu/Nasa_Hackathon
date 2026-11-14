@@ -16,3 +16,5 @@ Backtest 2015–2025, Argentina 1° cells, 132 start dates (each year fitted on 
 | La Rioja box | 247 | 114–463 | 274 | 0.90× |
 
 Inputs: NASA FIRMS only. NASA POWER weather and a NASA MERRA-2 El Niño index were tested and did not improve skill (branch `p4/forecast-experiments`).
+
+Data: NASA FIRMS (MODIS C6.1, VIIRS 375 m). Citations and licenses: README → "Sources, citations and licenses".

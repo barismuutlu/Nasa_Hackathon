@@ -255,12 +255,19 @@ def _():
     lr = query.forecast("La Rioja (AR)")
     assert lr is not None and lr["n_cells"] > 0 and lr["p10"] <= lr["pred"] <= lr["p90"]
     assert lr["label"] in ("below normal", "near normal", "above normal"), lr["label"]
-    assert query.forecast("Hohes Venn") is None, "Aachen'de görünüm olmamalı"
+    assert query.forecast("Hohes Venn") is None, "Hohes Venn: model yok → forecast None (geriye uyumlu)"
+    hv = query.seasonal_outlook("Hohes Venn")
+    assert hv is not None and hv["mode"] == "seasonal" and hv["skill"] is None, "Hohes Venn: seasonal (tahmin yok)"
+    assert query.seasonal_outlook("La Rioja (AR)")["mode"] == "model"
+    assert len(hv["profile"]) == 12 and len(hv["history"]) > 10 and hv["pred"] == hv["normal"]
+    assert lr["mode"] == "model" and len(lr["profile"]) == 12 and lr["history"].index.max() == lr["start"].year - 1
+    assert query.seasonal_outlook((10.0, 40.0, 11.0, 41.0)) is None, "veri olmayan alan → None"
     lon0, lat0, lon1, lat1 = query.PRESETS["La Rioja (AR)"]
     gj = {"type": "Polygon", "coordinates": [[[lon0, lat0], [lon1, lat0], [lon1, lat1], [lon0, lat1], [lon0, lat0]]]}
     assert query.forecast(gj)["n_cells"] == lr["n_cells"], "GeoJSON ≠ bbox"
     return (f"{lr['start']:%Y-%m-%d}→{lr['end']:%m-%d} La Rioja: {lr['pred']:.0f} ({lr['p10']:.0f}–{lr['p90']:.0f}) "
-            f"vs normal {lr['normal']:.0f} → {lr['label']}; test yön %{100 * lr['direction_hit_rate']:.0f}")
+            f"vs normal {lr['normal']:.0f} → {lr['label']}; test yön %{100 * lr['direction_hit_rate']:.0f}; "
+            f"Hohes Venn: {hv['label']} ({hv['years_with_detections']}/{hv['n_years']} yıl tespit)")
 
 
 # ---------------------------------------------------------------- rapor

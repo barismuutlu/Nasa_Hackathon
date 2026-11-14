@@ -80,6 +80,19 @@ Coefficients were learned from Argentina 2012–2021 only. Source: [`docs/valida
   of the April 2011 detections fall on burned pixels. MCD64A1 itself uses MODIS active-fire data, so this is
   not an independent validation.
 
+## Experimental: 30-day detection outlook
+
+Because the harmonized series is consistent across satellite changes, it can be used for forecasting. A simple
+model (seasonal normal + persistence of the last 30 days, per 1° cell, Argentina) gives a **30-day outlook of
+detection counts** — not a fire forecast.
+
+- Backtest 2015–2025 (132 start dates, each year fitted on earlier years only): **direction right 74%** of the time
+  (chance 50%), 23% lower squared error than the seasonal normal, positive in every year; regional totals unbiased.
+- Current outlook (data through 2026-11-12): **15 Nov – 14 Dec 2026**, Argentina ≈ 2,900 MODIS-equivalent
+  detections (80% range 1,500–5,400) vs. a 10-year normal of 3,700 → *near normal*.
+- NASA POWER weather and an El Niño index derived from NASA MERRA-2 were tested and **did not improve** skill
+  (branch `p4/forecast-experiments`). Details: [`docs/forecast/`](docs/forecast/), [`pipeline/forecast.py`](pipeline/forecast.py).
+
 ## Data
 
 All data comes from **NASA FIRMS** (Fire Information for Resource Management System,
@@ -94,7 +107,40 @@ https://firms.modaps.eosdis.nasa.gov/):
 
 Study areas: **Argentina** (calibration; includes La Rioja) and **Aachen/Eifel**
 (coordinate box 5.96–6.44° E, 50.44–50.83° N; includes the Hohes Venn).
-Comparison imagery: NASA Worldview.
+Comparison imagery: NASA Worldview. Full citations and licenses: [Sources, citations and licenses](#sources-citations-and-licenses).
+
+## Sources, citations and licenses
+
+Every source used to build this project is listed here. All **analysis data is NASA data**; NASA Earth
+science data is openly shared without restriction on use. We do not use the NASA logo or imply NASA endorsement.
+
+**Acknowledgements.** We acknowledge the use of data from NASA's Fire Information for Resource Management
+System (FIRMS), part of NASA's Earth Science Data and Information System (ESDIS). NASA POWER data were obtained
+from the NASA Langley Research Center (LaRC) POWER Project, funded through the NASA Earth Science Division.
+
+### Data
+
+| Source | Used for | Citation | Terms |
+|---|---|---|---|
+| NASA FIRMS — MODIS Collection 6.1 active fire, Terra + Aqua (standard + NRT) | core dataset | MCD14ML: [doi:10.5067/FIRMS/MODIS/MCD14ML](https://doi.org/10.5067/FIRMS/MODIS/MCD14ML); MCD14DL NRT: [doi:10.5067/FIRMS/MODIS/MCD14DL.NRT.0061](https://doi.org/10.5067/FIRMS/MODIS/MCD14DL.NRT.0061) | NASA open data |
+| NASA FIRMS — VIIRS 375 m active fire, Suomi NPP / NOAA-20 / NOAA-21 (standard + NRT) | core dataset | S-NPP: [doi:10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002](https://doi.org/10.5067/FIRMS/VIIRS/VNP14IMGT_NRT.002); NOAA-20: [doi:10.5067/FIRMS/VIIRS/VJ114IMGT_NRT.002](https://doi.org/10.5067/FIRMS/VIIRS/VJ114IMGT_NRT.002); NOAA-21: VJ214IMGT_NRT, see [FIRMS](https://www.earthdata.nasa.gov/data/tools/firms) | NASA open data |
+| NASA MCD64A1 v061 burned area | supporting check (`pipeline/burned_area_check.py`) | Giglio, L., Justice, C., Boschetti, L., Roy, D. (2021). *MODIS/Terra+Aqua Burned Area Monthly L3 Global 500m SIN Grid V061*. NASA EOSDIS LP DAAC. [doi:10.5067/MODIS/MCD64A1.061](https://doi.org/10.5067/MODIS/MCD64A1.061). Algorithm: Giglio et al. (2018), *Remote Sens. Environ.* 217, 72–85, [doi:10.1016/j.rse.2018.08.005](https://doi.org/10.1016/j.rse.2018.08.005) | NASA open data |
+| NASA POWER, daily point API (MERRA-2: precipitation, max. temperature, humidity, skin temperature) | outlook experiments only — tested, **not used** by the shipped outlook | NASA LaRC POWER Project, https://power.larc.nasa.gov/, accessed 2026-11-14. MERRA-2: Gelaro, R. et al. (2017), *J. Climate* 30, 5419–5454, [doi:10.1175/JCLI-D-16-0758.1](https://doi.org/10.1175/JCLI-D-16-0758.1) | NASA open data |
+| NASA Worldview | comparison imagery in the presentation | https://worldview.earthdata.nasa.gov/ | NASA open data |
+| Map basemap in the app | background only | Imagery © Esri, Maxar, Earthstar Geographics | Esri terms of use (Esri Master License Agreement) |
+
+### Software (open source)
+
+| Package | License | Package | License |
+|---|---|---|---|
+| Python 3.12 | PSF License | streamlit | Apache-2.0 |
+| pandas | BSD-3-Clause | streamlit-folium | MIT |
+| numpy | BSD-3-Clause | folium (Leaflet, Leaflet.draw, Leaflet.heat) | MIT (Leaflet: BSD-2-Clause) |
+| pyarrow | Apache-2.0 | plotly | MIT |
+| shapely | BSD-3-Clause | scikit-learn | BSD-3-Clause |
+| matplotlib | Matplotlib License (PSF-based) | uv (setup tool) | MIT / Apache-2.0 |
+
+Exact versions: [`requirements.txt`](requirements.txt). AI assistance: see [Use of AI](#use-of-ai).
 
 ## What this is — and what it is not
 
@@ -150,9 +196,10 @@ python pipeline/validate.py    # → docs/validation/
 
 ```
 app/            Streamlit app (app.py) and query layer (query.py)
-pipeline/       ingest → harmonize → validate
+pipeline/       ingest → harmonize → validate; forecast.py (experimental 30-day outlook)
 contract.py     shared data schema + validator used by every pipeline step
-docs/           CONTRACT.md (data contract), validation/ (results), pitch/ (presentation)
+docs/           CONTRACT.md (data contract), validation/ (results), forecast/ (outlook backtest), pitch/ (presentation)
+forecast/       monthly outlook prototype (experimental)
 tests/          end-to-end smoke test
 data/deploy/    harmonized extract for the preset regions (used by the live demo)
 data/mock/      synthetic data for development (full data is not committed)
