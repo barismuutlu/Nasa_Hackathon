@@ -52,6 +52,13 @@ st.markdown("""<style>
 @keyframes sitelogo-shrink {to {height: 36px;}}
 @keyframes sitesub-fade {to {opacity: 0;}}
 @media (max-width: 768px) {.sitebar {padding: 0 1rem;} .sitebar .subtitle {display: none;}}
+/* Site footer: separate band at the end of every page, links to the four info pages */
+.st-key-sitefooter {margin-top: 2.5rem; padding: 1.1rem 1.4rem 1.2rem; background: #272522;
+                    border-top: 1px solid #3b3834; border-radius: .6rem;}
+.st-key-sitefooter button {color: #ece7de; text-decoration: underline; text-underline-offset: 3px;
+                           text-decoration-color: #6f6a61;}
+.st-key-sitefooter button:hover {color: #e8833a;}
+.footnote {color: #a39d92; font-size: .88rem; margin-top: .2rem;}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
@@ -111,6 +118,94 @@ def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=Tr
     st.session_state["annual_log"] = annual_log
 
 
+# ---------- Info pages (opened from the footer links; ?page=<key>) ----------
+def page_method():
+    st.markdown(
+        "**Harmonization (Method A).** MODIS is the common unit; historical MODIS data are not modified.\n\n"
+        "- MODIS detections before 2012-01-20 (VIIRS S-NPP start): weight 1 "
+        "(Terra-only period before Aqua, 2000-11 → 2002-07: weight 2.75, Terra+Aqua equivalent).\n"
+        "- MODIS detections after 2012-01-20: weight 0 — the series is carried by VIIRS; "
+        "MODIS is kept for validation only.\n"
+        "- Each VIIRS detection: weight = *k* / *n*, where *k* = ΣMODIS / ΣVIIRS "
+        "(per satellite × latitude band × local season; calibrated on Argentina 2012–2021, "
+        "*k* ≈ 0.20–0.34) and *n* = number of VIIRS satellites active that day.\n"
+        "- Harmonized count of any set of rows = Σ weight. Southern-hemisphere months are shifted by 6 "
+        "so that a seasonal *k* transfers between hemispheres.")
+
+
+def page_validation():
+    if MET is None:
+        st.info("Validation metrics not available (docs/validation/metrics.json).")
+    else:
+        rows = [("argentina", "test", "Argentina, held-out 2022–2024"),
+                ("argentina", "test_2023-2024", "Argentina 2023–2024 (NOAA-21 not in training)"),
+                ("argentina", "test_2022", "Argentina 2022"),
+                ("aachen_eifel", "transfer_2012-2026", "Aachen/Eifel transfer 2012–2026")]
+        out = []
+        for reg, split, name in rows:
+            r = {mth: MET[(MET.method == mth) & (MET.region == reg) & (MET.split == split)
+                          & (MET.scale == "1deg")] for mth in ("harm", "raw_viirs")}
+            if len(r["harm"]):
+                out.append({"Evaluation (1° cell-month)": name,
+                            "R² harmonized": round(float(r["harm"].iloc[0].r2), 2),
+                            "Bias harmonized": f"{float(r['harm'].iloc[0].bias_pct):+.1f}%",
+                            "R² raw VIIRS": round(float(r["raw_viirs"].iloc[0].r2), 1) if len(r["raw_viirs"]) else None,
+                            "Bias raw VIIRS": f"{float(r['raw_viirs'].iloc[0].bias_pct):+.0f}%" if len(r["raw_viirs"]) else "–",
+                            "n": int(r["harm"].iloc[0].n)})
+        st.dataframe(pd.DataFrame(out), hide_index=True, width="stretch")
+        st.markdown('<div class="figcap"><b>Table 1.</b> Prediction = harmonized VIIRS sum; reference = '
+                    'MODIS count in the same 1° cell and month. bias = Σpred / Σref − 1. '
+                    'R² is scale-dependent (higher at 1° than 0.25°). Source: docs/validation/metrics.json '
+                    '(P3).</div>', unsafe_allow_html=True)
+
+
+def page_limitations():
+    st.markdown(
+        "1. **2022 over-estimation (+18%)** in Argentina, concentrated in the fire season; the raw "
+        "MODIS/VIIRS ratio of 2022 lies outside the training range. Annual uncertainty ≈ ±8–17%.\n"
+        "2. **Transfer to Europe is weaker.** Aachen/Eifel R² = 0.79 is driven by a single event "
+        "(Aug 2026); excluding it, R² = 0.37 with total bias −4.3%. For the large event the estimate "
+        "is +61% (169 vs 105 MODIS).\n"
+        "3. **Hypothesis, not validated:** *k* depends on fire size — a single large front yields "
+        "disproportionately many VIIRS pixels (implied *k* 0.176 < all training *k* ≥ 0.20). "
+        "Future work: condition *k* on cluster area / FRP; add a European training region.\n\n"
+        "Detections are thermal anomalies, not confirmed fire events. Harmonized values are estimates.")
+
+
+def page_sources():
+    st.markdown(
+        "- **NASA FIRMS** active fire data (archive + NRT), downloaded via DL_FIRE.\n"
+        "- **MODIS** Collection 6.1, Terra (2000-11 →) and Aqua (2002-07 →), 1 km pixels.\n"
+        "- **VIIRS** 375 m: S-NPP (2012-01 → 2026-11-02), NOAA-20 (2018-04 →), NOAA-21 (2023-03 →).\n"
+        "- Supporting check (not independent): MCD64A1 burned area for Hohes Venn — "
+        "Apr 2011: 9/17 MODIS detections inside burned pixels; Aug 2026: 93/105 MODIS, 1,674/1,794 VIIRS.\n"
+        f"- Loaded file: `{INFO['path']}` · {INFO['n_rows']:,} rows · "
+        f"{INFO['start']:%Y-%m-%d} → {INFO['end']:%Y-%m-%d} · satellites: {', '.join(INFO['satellites'])} · "
+        f"data contract v{INFO.get('contract', '?')}.")
+
+
+PAGES = {"method": ("Method", page_method), "validation": ("Validation", page_validation),
+         "limitations": ("Limitations", page_limitations), "sources": ("Data sources", page_sources)}
+# main-page widget keys: re-assigned while an info page is open so the selection survives the round trip
+KEEP = ["preset", "mode_lbl", "years", "exact", "scale", "sel_year", "sel_month", "annual_log"]
+
+
+def open_page(key=None):
+    if key:
+        st.query_params["page"] = key
+    else:
+        st.query_params.clear()
+
+
+def site_footer():
+    with st.container(key="sitefooter"):
+        cols = st.columns([1, 1, 1, 1, 4])
+        for c, (key, (label, _)) in zip(cols, PAGES.items()):
+            c.button(label, key=f"foot_{key}", type="tertiary", on_click=open_page, args=(key,))
+        st.markdown('<div class="footnote">Powered by NASA FIRMS active fire data (MODIS, VIIRS). '
+                    'Made by Gravity False 9. © 2026, all rights reserved.</div>', unsafe_allow_html=True)
+
+
 # ---------- Header ----------
 if INFO.get("is_mock"):
     st.warning("SYNTHETIC TEST DATA — not for interpretation")
@@ -118,6 +213,18 @@ if INFO.get("is_mock"):
 st.markdown(f'<div class="sitebar"><img alt="FireWatch" src="data:image/png;base64,'
             f'{base64.b64encode(LOGO.read_bytes()).decode()}">'
             '<div class="subtitle">Active Fire Detection Calendar, 2000–2026</div></div>', unsafe_allow_html=True)
+
+# ---------- Info page instead of the calendar ----------
+_page = st.query_params.get("page")
+if _page in PAGES:
+    for _k in KEEP:
+        if _k in st.session_state:
+            st.session_state[_k] = st.session_state[_k]
+    st.button("← Back to the calendar", type="tertiary", on_click=open_page)
+    st.header(PAGES[_page][0])
+    PAGES[_page][1]()
+    site_footer()
+    st.stop()
 
 st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
@@ -443,73 +550,9 @@ def annual_chart(df, d0, d1):
            "with every new sensor; the harmonized series should not. First and last years are partial.")
 
 
-# ---------- Methods, validation, limitations ----------
-def methods_section():
-    st.subheader("Methods & validation")
-    t1, t2, t3, t4 = st.tabs(["Method", "Validation", "Limitations", "Data sources"])
-    with t1:
-        st.markdown(
-            "**Harmonization (Method A).** MODIS is the common unit; historical MODIS data are not modified.\n\n"
-            "- MODIS detections before 2012-01-20 (VIIRS S-NPP start): weight 1 "
-            "(Terra-only period before Aqua, 2000-11 → 2002-07: weight 2.75, Terra+Aqua equivalent).\n"
-            "- MODIS detections after 2012-01-20: weight 0 — the series is carried by VIIRS; "
-            "MODIS is kept for validation only.\n"
-            "- Each VIIRS detection: weight = *k* / *n*, where *k* = ΣMODIS / ΣVIIRS "
-            "(per satellite × latitude band × local season; calibrated on Argentina 2012–2021, "
-            "*k* ≈ 0.20–0.34) and *n* = number of VIIRS satellites active that day.\n"
-            "- Harmonized count of any set of rows = Σ weight. Southern-hemisphere months are shifted by 6 "
-            "so that a seasonal *k* transfers between hemispheres.")
-    with t2:
-        if MET is None:
-            st.info("Validation metrics not available (docs/validation/metrics.json).")
-        else:
-            rows = [("argentina", "test", "Argentina, held-out 2022–2024"),
-                    ("argentina", "test_2023-2024", "Argentina 2023–2024 (NOAA-21 not in training)"),
-                    ("argentina", "test_2022", "Argentina 2022"),
-                    ("aachen_eifel", "transfer_2012-2026", "Aachen/Eifel transfer 2012–2026")]
-            out = []
-            for reg, split, name in rows:
-                r = {mth: MET[(MET.method == mth) & (MET.region == reg) & (MET.split == split)
-                              & (MET.scale == "1deg")] for mth in ("harm", "raw_viirs")}
-                if len(r["harm"]):
-                    out.append({"Evaluation (1° cell-month)": name,
-                                "R² harmonized": round(float(r["harm"].iloc[0].r2), 2),
-                                "Bias harmonized": f"{float(r['harm'].iloc[0].bias_pct):+.1f}%",
-                                "R² raw VIIRS": round(float(r["raw_viirs"].iloc[0].r2), 1) if len(r["raw_viirs"]) else None,
-                                "Bias raw VIIRS": f"{float(r['raw_viirs'].iloc[0].bias_pct):+.0f}%" if len(r["raw_viirs"]) else "–",
-                                "n": int(r["harm"].iloc[0].n)})
-            st.dataframe(pd.DataFrame(out), hide_index=True, width="stretch")
-            st.markdown('<div class="figcap"><b>Table 1.</b> Prediction = harmonized VIIRS sum; reference = '
-                        'MODIS count in the same 1° cell and month. bias = Σpred / Σref − 1. '
-                        'R² is scale-dependent (higher at 1° than 0.25°). Source: docs/validation/metrics.json '
-                        '(P3).</div>', unsafe_allow_html=True)
-    with t3:
-        st.markdown(
-            "1. **2022 over-estimation (+18%)** in Argentina, concentrated in the fire season; the raw "
-            "MODIS/VIIRS ratio of 2022 lies outside the training range. Annual uncertainty ≈ ±8–17%.\n"
-            "2. **Transfer to Europe is weaker.** Aachen/Eifel R² = 0.79 is driven by a single event "
-            "(Aug 2026); excluding it, R² = 0.37 with total bias −4.3%. For the large event the estimate "
-            "is +61% (169 vs 105 MODIS).\n"
-            "3. **Hypothesis, not validated:** *k* depends on fire size — a single large front yields "
-            "disproportionately many VIIRS pixels (implied *k* 0.176 < all training *k* ≥ 0.20). "
-            "Future work: condition *k* on cluster area / FRP; add a European training region.\n\n"
-            "Detections are thermal anomalies, not confirmed fire events. Harmonized values are estimates.")
-    with t4:
-        st.markdown(
-            "- **NASA FIRMS** active fire data (archive + NRT), downloaded via DL_FIRE.\n"
-            "- **MODIS** Collection 6.1, Terra (2000-11 →) and Aqua (2002-07 →), 1 km pixels.\n"
-            "- **VIIRS** 375 m: S-NPP (2012-01 → 2026-11-02), NOAA-20 (2018-04 →), NOAA-21 (2023-03 →).\n"
-            "- Supporting check (not independent): MCD64A1 burned area for Hohes Venn — "
-            "Apr 2011: 9/17 MODIS detections inside burned pixels; Aug 2026: 93/105 MODIS, 1,674/1,794 VIIRS.\n"
-            f"- Loaded file: `{INFO['path']}` · {INFO['n_rows']:,} rows · "
-            f"{INFO['start']:%Y-%m-%d} → {INFO['end']:%Y-%m-%d} · satellites: {', '.join(INFO['satellites'])} · "
-            f"data contract v{INFO.get('contract', '?')}.")
-
-
 with col_cal.container(border=True):
     calendar_and_anomaly(df, mode, d0, d1)
 if not df.empty:
     with st.container(border=True):
         annual_chart(df, d0, d1)
-with st.container(border=True):
-    methods_section()
+site_footer()
