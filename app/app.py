@@ -124,6 +124,10 @@ with col_map:
         st.rerun()
     st.caption(f"{len(df_map):,} tespit / detections"
                + (f" (haritada {MAX_POINTS:,} örnek / sampled)" if len(df_map) > MAX_POINTS else ""))
+    if preset == "Aachen/Eifel":
+        st.caption("Not: Kutunun kuzeybatı köşesi (Aachen şehri, ≈50,73°K kuzeyi / 6,10°D batısı) indirme "
+                   "kapsamı dışında; orada boş görünen alan 'tespit yok' değil 'veri yok' demektir. "
+                   "/ Note: the NW corner (Aachen city) is outside the download area.")
 
 with st.sidebar:
     st.download_button("CSV indir / Download", data=to_csv_bytes(df),
