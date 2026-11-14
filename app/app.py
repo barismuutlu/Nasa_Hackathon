@@ -38,7 +38,11 @@ st.markdown("""<style>
 /* Site header: fixed bar with the logo; shrinks while the page scrolls (scroll-driven CSS, no JS).
    Browsers without animation-timeline keep the full-size bar. */
 [data-testid="stMain"] {scroll-timeline: --page block;}
-[data-testid="stMainBlockContainer"] {padding-top: 7.6rem;}  /* room for the fixed bar */
+/* room for the fixed bar on top; no empty band under the footer (it sits on the page end, also on short pages) */
+[data-testid="stMainBlockContainer"] {padding-top: 7.6rem; padding-bottom: 0; min-height: 100vh;
+                                      display: flex; flex-direction: column;}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {flex: 1 1 auto; min-height: calc(100vh - 7.6rem);}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > div:has(> .st-key-sitefooter) {margin-top: auto;}
 [data-testid="stHeader"] {background: transparent; height: 2.2rem;}
 .sitebar {position: fixed; top: 0; left: 0; right: 0; z-index: 999980; height: 96px; padding: 0 5rem;
           display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
@@ -53,12 +57,12 @@ st.markdown("""<style>
 @keyframes sitesub-fade {to {opacity: 0;}}
 @media (max-width: 768px) {.sitebar {padding: 0 1rem;} .sitebar .subtitle {display: none;}}
 /* Site footer: separate band at the end of every page, links to the four info pages */
-.st-key-sitefooter {margin-top: 2.5rem; padding: 1.1rem 1.4rem 1.2rem; background: #272522;
-                    border-top: 1px solid #3b3834; border-radius: .6rem;}
+.st-key-sitefooter {margin-top: auto; padding: 1.1rem 1.4rem 1.2rem; background: #272522;
+                    border-top: 1px solid #3b3834; border-radius: .6rem .6rem 0 0;}
 .st-key-sitefooter button {color: #ece7de; text-decoration: underline; text-underline-offset: 3px;
                            text-decoration-color: #6f6a61;}
 .st-key-sitefooter button:hover {color: #e8833a;}
-.footnote {color: #a39d92; font-size: .88rem; margin-top: .2rem;}
+.footnote {color: #a39d92; font-size: .88rem; margin-top: .2rem; text-align: center;}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
