@@ -1,2 +1,6 @@
 [theme]
 base = "light"
+
+[client]
+# sağ üstteki geliştirici menüsünü (Deploy, ⋮) gizle — jüri/kullanıcı için sade görünüm
+toolbarMode = "viewer"

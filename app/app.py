@@ -14,8 +14,14 @@ from query import PRESETS, MONTH_LABELS, data_info, get_hotspots, monthly_matrix
 EN_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 MONTHS = [tr if tr == en else f"{tr}/{en}" for tr, en in zip(MONTH_LABELS, EN_MONTHS)]
 MAX_POINTS = 5000
+LOW_MEAN = 0.1  # anomali tabanı bunun altındaysa "kat" yerine "normalde ≈0"
 
 st.set_page_config(page_title="Aktif Yangın Tespit Takvimi", page_icon="🔥", layout="wide")
+# Streamlit'in sağ üstteki animasyonlu "çalışıyor" figürlerini gizle (profesyonel görünüm);
+# yükleme bilgisi st.cache_data spinner'ı ("Veri yükleniyor / Loading…") ile veriliyor
+st.markdown("""<style>
+[data-testid="stStatusWidget"] {visibility: hidden; height: 0;}
+</style>""", unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -48,9 +54,24 @@ st.title("🔥 Aktif Yangın Tespit Takvimi / Active Fire Detection Calendar")
 with st.sidebar:
     st.header("Ayarlar / Settings")
     preset = st.selectbox("Bölge / Region", list(PRESETS))
-    d0, d1 = st.date_input("Tarih aralığı / Date range",
-                           value=(INFO["start"].date(), INFO["end"].date()),
-                           min_value=INFO["start"].date(), max_value=INFO["end"].date())
+    # ana kontrol: yıl aralığı kaydırıcısı (veri aylık; takvim seçici yıl gezintisinde zorluyordu)
+    y_min, y_max = INFO["start"].year, INFO["end"].year
+    y0, y1 = st.slider("Yıl aralığı / Year range", y_min, y_max, (y_min, y_max), key="years")
+    d0 = max(pd.Timestamp(y0, 1, 1), INFO["start"]).date()
+    d1 = min(pd.Timestamp(y1, 12, 31), INFO["end"]).date()
+    # isteğe bağlı: gün bazında kesin tarih (iki ayrı, bağımsız alan)
+    with st.expander("Kesin tarih / Exact dates"):
+        exact = st.checkbox("Gün bazında filtrele / Filter by day", key="exact")
+        e0 = st.date_input("Başlangıç / Start", value=d0, min_value=INFO["start"].date(),
+                           max_value=INFO["end"].date(), format="YYYY-MM-DD", key="e0", disabled=not exact)
+        e1 = st.date_input("Bitiş / End", value=d1, min_value=INFO["start"].date(),
+                           max_value=INFO["end"].date(), format="YYYY-MM-DD", key="e1", disabled=not exact)
+        if exact:
+            if e0 > e1:
+                st.warning("Başlangıç bitişten sonra / Start is after end")
+            else:
+                d0, d1 = e0, e1
+    st.caption(f"Seçili / Selected: {d0:%Y-%m-%d} → {d1:%Y-%m-%d}")
     mode_lbl = st.radio("Seri / Series", ["Ham / Raw", "Harmonize / Harmonized"], horizontal=True)
     mode = "raw" if mode_lbl.startswith("Ham") else "harm"
     st.caption("Ham: tüm uyduların tespit sayısı. Harmonize: MODIS-eşdeğeri tahmin. "
@@ -125,14 +146,10 @@ with col_cal:
     if df.empty:
         st.info("Bu bölgede tespit yok / No detections in this area")
         st.stop()
-    mat = monthly_matrix(df, mode=mode)
-    # seçili tarih aralığı dışındaki aylar = veri yok (NaN → gri)
+    # tarih filtresi dışındaki aylar NaN (0 değil) → takvim, yıllık toplam ve anomali tabanı doğru
+    mat = monthly_matrix(df, mode=mode, start=pd.Timestamp(d0), end=pd.Timestamp(d1))
+    mat = mat.dropna(how="all")  # tamamen filtre dışı yıllar takvimde ve tabanda yok
     shown = mat.astype(float).copy()
-    first, last = pd.Timestamp(d0).to_period("M"), pd.Timestamp(d1).to_period("M")
-    for yy in shown.index:
-        for mm in shown.columns:
-            if not (first <= pd.Period(year=int(yy), month=int(mm), freq="M") <= last):
-                shown.loc[yy, mm] = np.nan
     z = shown.values
     scale = st.radio("Renk ölçeği / Color scale",
                      ["Log", "Doğrusal / Linear", "Anomali (z) / Anomaly (z)"],
@@ -167,6 +184,7 @@ with col_cal:
         hoverinfo="skip", **hm,
     ))
     # Streamlit heatmap tıklamasını yakalamıyor → her hücreye görünmez tıklanabilir nokta
+    hover_unit = "Tespit/Detections" if mode == "raw" else "MODIS-eşd. / MODIS-equiv."
     gy, gx = np.meshgrid(shown.index.astype(str), MONTHS, indexing="ij")
     # kısmi aylar: verinin / seçili aralığın ilk ve son ayı tam kapsanmıyorsa işaretle
     cov0 = max(pd.Timestamp(d0), INFO["start"])
@@ -190,11 +208,13 @@ with col_cal:
         x=gx.ravel(), y=gy.ravel(), mode="markers", showlegend=False,
         customdata=np.stack([z.ravel(), notes.ravel()], axis=-1),
         marker=dict(symbol="square", size=18, color="rgba(0,0,0,0)"),
-        hovertemplate="Yıl/Year %{y}<br>Ay/Month %{x}<br>Tespit/Detections %{customdata[0]:.1f}"
+        hovertemplate="Yıl/Year %{y}<br>Ay/Month %{x}<br>" + hover_unit + " %{customdata[0]:.1f}"
                       "%{customdata[1]}<extra></extra>",
     ))
     fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10), clickmode="event+select",
-                      plot_bgcolor="#cccccc", yaxis=dict(autorange="reversed", dtick=2))
+                      plot_bgcolor="#cccccc",
+                      # y ekseni sadece veri yılları (1998–2028 boşluğu yok)
+                      yaxis=dict(range=[int(shown.index.max()) + 0.5, int(shown.index.min()) - 0.5], dtick=2))
     ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal")
     st.caption("Bir hücreye tıkla → anomali kartı / Click a cell → anomaly card · "
                "• = kısmi ay, sayı tam aydan düşük olabilir / partial month")
@@ -208,8 +228,8 @@ with col_cal:
 
 # ---------- Yıllık karşılaştırma ----------
 st.subheader("Yıllık toplam: Ham vs Harmonize / Annual total: Raw vs Harmonized")
-raw_y = monthly_matrix(df, "raw").sum(axis=1, min_count=1)
-harm_y = monthly_matrix(df, "harm").sum(axis=1, min_count=1)
+raw_y = monthly_matrix(df, "raw", start=pd.Timestamp(d0), end=pd.Timestamp(d1)).sum(axis=1, min_count=1).dropna()
+harm_y = monthly_matrix(df, "harm", start=pd.Timestamp(d0), end=pd.Timestamp(d1)).sum(axis=1, min_count=1).dropna()
 fy = go.Figure()
 fy.add_trace(go.Scatter(x=raw_y.index, y=raw_y.values, name="Ham / Raw", mode="lines+markers",
                         line=dict(color="#440154", width=3)))
@@ -262,7 +282,13 @@ ratio = val / mean if (fmt(val) != "–" and fmt(mean) != "–" and mean > 0) el
 k1.metric("Tespit / Detections", fmt(val))
 k2.metric("Sıra / Rank", f"{a['rank']}/{a['n_years']}" if a.get("rank") is not None else "–",
           help="1 = bu ay için en yüksek yıl / 1 = highest year for this month")
-k3.metric("Ortalamanın katı / × mean", (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×") if ratio is not None else "–")
+if ratio is not None and mean < LOW_MEAN:
+    # taban ≈0 iken "2115×" anlamsız → normal ay seviyesini yaz
+    k3.metric("Normal ay / Typical month", f"≈{mean:.1f}", "normalde ≈0 tespit/ay / normally ≈0 per month",
+              delta_color="off")
+else:
+    k3.metric("Ortalamanın katı / × mean",
+              (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×") if ratio is not None else "–")
 k4.metric("Durum / Label", a["label"])
 st.caption(f"Ortalama ± std / Mean ± std: {fmt(mean)} ± {fmt(a['std'])} ({a['n_years']} yıl / years)"
            f" · z = {fmt(a['z'], '.1f')}")
