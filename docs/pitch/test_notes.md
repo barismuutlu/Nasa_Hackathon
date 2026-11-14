@@ -67,6 +67,12 @@ P3'ün son teslim kontrolü PowerShell `Select-String` ile çalıştırıldı: t
 
 P1 ayrıca eski Belçika ülke-yıl dosyasındaki 17 kayıtla DL_FIRE kayıtlarının birebir eşleştiğini bildirdi. Bu iki FIRMS indirmesinin tutarlılığıdır; bağımsız yer gerçeği kontrolü olarak sunulmaz. Sayısal metriklerden ayrı tutuldu; yeni [sınırlama slaytı](slides/limitations.md) aynı çerçeveyi korur.
 
+## P1'in son sayısal incelemesi
+
+Kaynak: Süleyman'ın `9c8abb9` referanslı mesajı. Nisan geçişleri, 25,5× / 26,6× / 6,4× / 28,7× tabanları ve 26 Nisan kapsamı; Ağustos 105 + 1.794 = 1.899, harmonize 169,2 ve yaklaşık +%61; MCD64A1 oranları/tarihleri/duyarlılığı; La Rioja 2011/2012/2017/2018/2023 değerleri ve 2017 yaklaşık +%32 veriden kontrol edilmiş ve fark bildirilmemiştir. Bu P1'in raporudur; P6 bu makinede yeniden hesaplamadı.
+
+Konumsal ifade netleştirildi: kalan 8 tespit eşleşenlerin güney/doğu çevresinde; 5×5 komşulukta 6'sı daha eşleşiyor. Yanık sınırı haritasıyla ölçülmediğinden “yanık kenarında” yorumu kullanılmıyor. Sayısal sonuçlar değiştirilmedi.
+
 ## P3 teslimindeki kontrol komutu
 
 İstenen Python kontrolü bu makinede çalıştırılmadı: Python 3.12 sanal ortamı yok. Aynı JSON kaydı PowerShell ile yerelde okunarak kontrol edildi: `data=harm`, `method=harm`, `region=argentina`, `split=test`, `scale=1deg`; R²=0,7918, bias_pct=6,72, n=8.616. `summary.md` açılıyor ve “Sunum için 3 cümle” bölümü mevcut. Bu dosya incelemesidir; runtime/model testi değildir.
@@ -124,6 +130,6 @@ Eski indirme akışına ait komutlar ve taşıma yönergeleri tarihsel belgelerd
 - [x] Tarihsel cloud ortam raporu, P5 testleri ve P6 belge incelemesi birbirinden ayrıldı.
 - [ ] P6 yerel Python/runtime tekrarı ve T08 elle tekrar tamamlandı.
 - [ ] Canlı Cloud ekranları, çevrimdışı demo videosu ve <4:00 prova tamamlandı.
-- [x] Kullanıcı bu oturumdaki birikmiş belge değişiklikleri için açık push onayı verdi.
+- [x] Önceki toplu belge teslimi (`9c8abb9`) için kullanıcı açık push onayı verdi.
 
 Tarihsel manifest için önceki yerel kontrol: 144 kayıt, 6.893.939 ham satır, 554.614.725 bayt; JSON/CSV iç tutarlılığı eşleşmişti. Kaynak CSV/ZIP dosyaları veya SHA-256 içerikleri yerelde yeniden doğrulanmadı.
