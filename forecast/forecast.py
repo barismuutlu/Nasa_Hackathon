@@ -1,4 +1,5 @@
-"""P2 — PROTOTİP: 1 ay ileri tespit görünümü (one-month outlook). Sahibi: Bahtiyar. Ana pipeline'a bağlı DEĞİL.
+"""EXPERIMENTAL — P2 prototipi: 1 ay ileri tespit görünümü (one-month detection outlook).
+Sahibi: Bahtiyar. Ana pipeline'a ve uygulamaya bağlı DEĞİL; sonuçları ürün çıktısı olarak sunulmaz.
 
 Soru: Harmonize 26 yıllık takvim, GELECEK AY için "normalin altında / normal / üstünde" diyebilir mi?
 Bu bir yangın tahmini DEĞİLDİR: hava durumu / kuraklık / yakıt nemi / tutuşma verisi yok. Kullandığı iki bilgi:
