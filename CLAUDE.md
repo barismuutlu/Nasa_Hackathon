@@ -11,16 +11,22 @@
    ```
 3. **Sadece o rolün sahip olduğu dosyalara yaz.** Başka birinin dosyasında değişiklik gerekiyorsa
    kodu yazma; kullanıcıya "şu kişiye şunu söyle" diye kısa bir not ver.
-4. Şema (bölüm 3) veya API (bölüm 4) değişikliği gerekiyorsa: dur, kullanıcıya "önce P4'e sor" de.
+4. Şema veya API (`docs/CONTRACT.md`) değişikliği gerekiyorsa: dur, kullanıcıya "önce P4'e sor" de.
+5. Başkasına etki eden her teslimde **§8 Teslim Protokolü**'nü uygula (test → onay → push → prompt).
+6. Kullanıcı `[Px İsim → Py İsim]` başlıklı bir prompt yapıştırırsa: önce `git pull --rebase`,
+   sonra prompttaki KONTROL adımını çalıştır, sonucu kullanıcıya göster, ardından YAPMAN GEREKEN'e geç.
 
 ## 1. Proje
-NASA FIRMS aktif yangın tespitleri ile 2000–2026 arası **tutarlı bir aylık yangın takvimi**.
+NASA FIRMS aktif yangın **tespitleri** ile 2000–2026 arası **tutarlı bir aylık tespit takvimi**.
 Sorun: MODIS (Terra/Aqua, 2000→) ve VIIRS (S-NPP 2012→, NOAA-20 2018→, NOAA-21 2024→) farklı
 hassasiyette; her yeni uydu ham sayılarda **yapay sıçrama** yaratır. Biz VIIRS tespitlerini
 **MODIS-eşdeğeri** birime çevirip (harmonizasyon) kesintisiz bir seri gösteriyoruz.
+Harmonizasyon katsayıları **doğrulanmamış bir hipotezdir**; P3'ün test metrikleri (2022–2024)
+gelmeden "doğru/kalibre" diye sunulmaz, metrikler geldikten sonra da sayılarıyla birlikte sunulur.
 
 Pitch'in ana görseli: ham takvimde 2012/2018/2024 sıçramaları → harmonize takvimde yok.
-Doğrulama hikâyesi: Hohes Venn (Aachen/Eifel) yangınları **Nisan 2011** ve **Ağustos 2026** görünmeli.
+Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tespit artışları
+**Nisan 2011** ve **Ağustos 2026**'da takvimde görünmeli. (Tespit ≠ doğrulanmış yangın olayı.)
 
 ## 2. Ekip & dosya sahipliği
 | Rol | Kişi | Sahip olduğu dosyalar |
@@ -28,109 +34,74 @@ Doğrulama hikâyesi: Hohes Venn (Aachen/Eifel) yangınları **Nisan 2011** ve *
 | P1 Veri Mühendisi | Süleyman | `pipeline/ingest.py`, `data/sample/` |
 | P2 Harmonizasyon | Bahtiyar | `pipeline/harmonize.py` |
 | P3 ML & Doğrulama | Oğuzhan | `pipeline/validate.py`, `docs/validation/` |
-| P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
+| P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
 | P5 Arayüz | Yusuf | `app/app.py`, `.streamlit/config.toml` |
 | P6 Sunum & Test | İbrahim | `docs/pitch/` |
 
 Ortak dosyalara (`requirements.txt` vb.) paket eklemek gerekirse → Barış'a söyle, o ekler.
 
-## 3. Veri şeması (KİLİTLİ — değişiklik sadece P4 onayıyla)
+## 3. Veri sözleşmesi v1.1 (KİLİTLİ — değişiklik sadece P4 onayıyla)
+Tam şema, tekrar kuralları, bölge adları, pipeline girdi/çıktıları ve `query.py` API'si:
+**`docs/CONTRACT.md`** (aşağıda içe aktarılıyor). Kod karşılığı: **`contract.py`**
+(sabitler + `validate_hotspots(df, stage)`). P1 ve P2 parquet yazmadan önce doğrulayıcıyı çağırır.
 
-### 3.1 `data/hotspots.parquet` (P1 yazar) ve `data/hotspots_harm.parquet` (P2 yazar, aynı şema)
-| Sütun | Tip | Açıklama |
-|---|---|---|
-| `lat` | float64 | enlem |
-| `lon` | float64 | boylam |
-| `acq_date` | datetime64[ns] | UTC tarih (saat 00:00) |
-| `acq_time` | int16 | UTC HHMM (ör. 1342) |
-| `year` | int16 | |
-| `month` | int8 | 1–12 |
-| `instrument` | category | `"MODIS"` \| `"VIIRS"` |
-| `satellite` | category | `"Terra"` \| `"Aqua"` \| `"SNPP"` \| `"NOAA20"` \| `"NOAA21"` |
-| `confidence` | category | `"low"` \| `"nominal"` \| `"high"` (MODIS: <30 low, 30–79 nominal, ≥80 high) |
-| `confidence_raw` | string | orijinal değer (MODIS 0–100, VIIRS l/n/h) |
-| `frp` | float32 | Fire Radiative Power, MW |
-| `bright` | float32 | MODIS `brightness` / VIIRS `bright_ti4` (K) |
-| `scan` | float32 | piksel boyutu (km) |
-| `track` | float32 | piksel boyutu (km) |
-| `daynight` | category | `"D"` \| `"N"` |
-| `fire_type` | Int8 (nullable) | archive `type` (0 bitki,1 volkan,2 statik,3 deniz); NRT'de null |
-| `source` | category | `"archive"` \| `"nrt"` |
-| `weight_harm` | float32 | P1: NaN yazar. P2: doldurur (bkz. 3.3) |
+@docs/CONTRACT.md
 
-### 3.2 `data/monthly_grid.parquet` (P2 yazar)
-`cell_lat, cell_lon, year, month, n_modis, n_snpp, n_noaa20, n_noaa21, n_harm`
-- Grid 0.25°: `cell_lat = floor(lat/0.25)*0.25 + 0.125` (hücre merkezi), `cell_lon` aynı.
-- `n_harm = Σ weight_harm` (o hücre-ay).
+Hatırlatma (en sık hata):
+- Sütunlar FIRMS adlarıyla: `latitude`, `longitude`, `brightness`, `confidence` (**orijinal değer**),
+  `type`. Sınıf için `confidence_class`.
+- Bir satır = bir **tespit** (termal anomali), doğrulanmış yangın olayı değil (CONTRACT §8).
+- `weight_harm` ingest'te NaN; yöntemi P2'nin, doğrulaması P3'ün (CONTRACT §6).
 
-### 3.3 `weight_harm` tanımı (karar — değişiklik → P4)
-Harmonize seri = **MODIS-eşdeğeri tespit sayısı** = `Σ weight_harm`.
-- MODIS satırı, `acq_date` < VIIRS S-NPP ilk tarih (~2012-01-20) → `1.0`
-- MODIS satırı, sonrası → `0.0` (bu dönemde seriyi VIIRS taşır; MODIS sadece doğrulama için)
-- VIIRS satırı → `k(lat_band, season, satellite) / n_active_viirs(acq_date)`
-  - `k = MODIS / VIIRS` (P2, Arjantin 2012–2021 eğitim verisinden)
-  - `n_active_viirs` = o tarihte aktif VIIRS uydu sayısı (1, 2 veya 3) → uydu eklenince sıçrama olmaz
-  - `lat_band` = |enlem| 10°'lik dilim (`"20-30"`, `"30-40"` …), `season` = **yerel** mevsim
-    (güney yarımkürede ay +6 kaydırılır) → Arjantin'de öğrenilen k, Almanya'ya taşınabilir
-- Yöntem B (P3, zaman kalırsa): lojistik regresyon ile her VIIRS tespiti için p(MODIS görür) → `weight_harm`.
-
-### 3.4 Dosya konumları
+### 3.1 Dosya konumları
 ```
-data/raw/         FIRMS CSV'leri (git'e GİRMEZ)
+contract.py       şema sabitleri + doğrulayıcı (P4)
+data/raw/<region>/  FIRMS CSV'leri, klasör adı = region slug'ı (git'e GİRMEZ)
 data/sample/      P1'in örnek dosyası (küçük, git'e girer)
-data/mock/        P4'ün sahte parquet'i (git'e girer)
+data/mock/        P4'ün sentetik parquet'i + üretici (git'e girer)
 data/deploy/      Streamlit Cloud için küçültülmüş veri (<50 MB, git'e girer)
-data/*.parquet    tam veri (git'e GİRMEZ — USB/Drive ile paylaşılır)
+data/*.parquet, data/*.csv   tam veri ve ara çıktılar (git'e GİRMEZ — Drive/USB)
+docs/CONTRACT.md  sözleşme (P4)
 docs/validation/  P3 çıktıları (png + metrics.json)
 docs/pitch/       P6
+tests/smoke_test.py  uçtan uca duman testi (P4)
 ```
 
-## 4. `app/query.py` API (P5 SADECE bunları kullanır)
+### 3.2 Paylaşılan modülü içe aktarma
+`pipeline/*.py` ve `app/*.py` kök dizini import yoluna ekleyerek `contract`'ı kullanır:
 ```python
-PRESETS: dict[str, tuple[float, float, float, float]]   # ad -> (lon_min, lat_min, lon_max, lat_max)
-                                                        # "Hohes Venn", "Aachen/Eifel", "La Rioja (AR)"
-data_info() -> dict
-    # {"path", "is_mock", "has_harm", "start", "end", "n_rows", "satellites"} → is_mock ise uyarı göster
-get_hotspots(geom, start=None, end=None, harmonized=False) -> pd.DataFrame
-    # geom: PRESETS adı, bbox tuple ya da GeoJSON (Feature/Polygon — streamlit-folium çizimi direkt)
-    # harmonized=True → sadece weight_harm > 0 satırlar (harita için)
-monthly_matrix(df, mode="raw") -> pd.DataFrame
-    # index=year, columns=1..12; mode="raw": satır sayısı (tüm uydular), mode="harm": Σ weight_harm
-    # veri kapsamı dışı aylar NaN, kapsam içinde tespit yoksa 0; harmonize veri yoksa "harm" hep NaN
-anomaly(matrix, year, month) -> dict
-    # {"value", "mean", "std", "z", "rank", "n_years", "label"}; taban = aynı ayın diğer yılları
-    # label: "çok yüksek" | "yüksek" | "normal" | "düşük" | "tespit yok" | "veri yok"
-to_csv_bytes(df) -> bytes
-MONTH_LABELS  # ["Oca", ..., "Ara"]
+import sys; from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from contract import validate_hotspots
 ```
-Veri kaynağı önceliği: `$HOTSPOTS_PATH` → `data/hotspots_harm.parquet` → `data/hotspots.parquet`
-→ `data/deploy/…` → `data/mock/hotspots_mock.parquet`.
 
-## 5. Çalıştırma
+## 4. Çalıştırma
 ```bash
 python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 python pipeline/ingest.py        # P1 → data/hotspots.parquet
 python pipeline/harmonize.py     # P2 → data/hotspots_harm.parquet, monthly_grid.parquet, k_factors.csv
 python pipeline/validate.py      # P3 → docs/validation/
+python tests/smoke_test.py       # P4 → sözleşme + query uçtan uca kontrol
 streamlit run app/app.py         # P5
 ```
 Tüm script'ler **repo kökünden** çalıştırılır; yollar köke göreli.
 
-## 6. Kod kuralları
+## 5. Kod kuralları
 - Python 3.11+, pandas + pyarrow. Kod/değişken isimleri İngilizce, yorumlar Türkçe olabilir.
 - Her pipeline script'i: `main()` + `if __name__ == "__main__":`, başta yol sabitleri.
 - Sessiz hata yok: beklenmeyen sütun/değer → açık `ValueError`.
 - Büyük veriyi tek seferde belleğe alma gerekiyorsa `pyarrow`/`usecols` kullan.
 - Yeni paket gerekirse ekleme, kullanıcıya "Barış'a söyle" de.
 
-## 7. Git kuralları
+## 6. Git kuralları
 - Commit'ten önce: `git pull --rebase`
 - 30–60 dk'da bir küçük commit; mesaj: `P1: archive+nrt birleştirme` gibi rol önekli.
 - Sadece kendi dosyalarını `git add` et (`git add -A` YOK).
 - Ajan (Claude) kodunu commit'ten önce oku ve en az bir kez çalıştır.
 - Veri dosyası (`data/raw`, büyük parquet) asla commit'lenmez.
+- Başkasını etkileyen push'lar §8'e göre yapılır.
 
-## 8. Takvim (Cumartesi 14 Kasım → Pazar 15 Kasım 2026)
+## 7. Takvim (Cumartesi 14 Kasım → Pazar 15 Kasım 2026)
 | Saat | Kontrol noktası |
 |---|---|
 | 08:55 | P4: repo iskeleti push |
@@ -148,3 +119,52 @@ Tüm script'ler **repo kökünden** çalıştırılır; yollar köke göreli.
 
 **Takıldın mı? 15 dk'dan fazla uğraşma, söyle.** Claude: kullanıcı aynı hatada 15 dk'yı geçtiyse
 bunu hatırlat ve "Barış'a yaz" öner.
+
+## 8. Teslim Protokolü — her önemli adımda (ZORUNLU)
+**Önemli adım** = başka birinin işini etkileyen her teslim: §7'deki teslimler, şema/API değişikliği,
+başkasının kullanacağı yeni dosya/fonksiyon, birinin beklediği bug fix.
+Üç adım sırayla yapılır; **kullanıcının açık onayı olmadan push yok.**
+
+### Adım 1 — Kullanıcıya test ettir, onay al
+- İş bittiğinde Claude push ETMEZ. Kullanıcıya kısa bir test listesi verir:
+  - çalıştırılacak komut(lar), kopyala-yapıştır hazır
+  - her komut için **beklenen sonuç** (sayı, tablo, ekranda ne görünmeli)
+  - rol dosyasındaki "Bitti kontrolü" maddelerinden ilgili olanlar
+- Kullanıcı kendisi çalıştırır / bakar. "Onay", "tamam push et" gibi **açık onay** gelene kadar
+  Adım 2'ye geçilmez. Sorun bildirilirse düzelt → Adım 1'i tekrarla.
+- Claude kendi testlerini de çalıştırabilir ama "testlerim geçti" kullanıcı onayının yerine geçmez.
+
+### Adım 2 — Değişiklik türüne göre GitHub'a gönder
+| Tür | Örnek | Yöntem |
+|---|---|---|
+| Küçük | kendi dosyanda iyileştirme, tek dosyalık bug fix | `main`'de commit → `git pull --rebase` → `git push` |
+| Yapısal | şema / API (`docs/CONTRACT.md`), ortak dosya (`CLAUDE.md`, `requirements.txt`), yeni çıktı dosyası, birden çok dosya | `git switch -c <rol>/<konu>` (ör. `p4/query-api`) → commit(ler) → `git switch main` → `git pull --rebase` → `git merge --no-ff <dal>` → `git push` → `git branch -d <dal>` |
+- Sadece kendi dosyalarını `git add` et. Commit mesajı: rol öneki + ne değişti + kimi etkiler.
+- Şema/API'ye dokunan yapısal değişiklik → önce P4 onayı (§0 madde 4).
+- Merge çakışması çıkarsa **çözmeye çalışma**: dur, kullanıcıya hangi dosyada ve kiminle çakıştığını söyle.
+- Push sonrası kısa commit hash'ini al (`git log --oneline -1`).
+
+### Adım 3 — Etkilenen arkadaşın Claude'u için prompt yaz
+Push'tan sonra etkilenen **her kişi için ayrı**, tek kod bloğunda, kopyala-yapıştır hazır prompt yaz.
+Alıcı Claude bu sohbeti görmedi: dosya yolları, fonksiyon adları ve CLAUDE.md bölüm numaraları
+açıkça yazılmalı, prompt tek başına anlaşılır olmalı. Şablon:
+```
+[P4 Barış → P5 Yusuf] <konu> — commit <hash>
+
+ÖNCE: git pull --rebase
+
+NE DEĞİŞTİ:
+- <dosya>: <değişiklik>
+
+SENİN İÇİN ANLAMI:
+- <alıcının işini nasıl etkiliyor>
+
+YAPMAN GEREKEN:
+1. <somut adım>
+
+KONTROL (çalıştır, sonucu kullanıcıya göster):
+- <komut>  →  beklenen: <sonuç>
+
+DOKUNMA: <alıcının sahibi olmadığı dosyalar>. Sorun varsa kod yazma, <gönderen>'e bildir.
+```
+Prompt sohbette verilir; kullanıcı WhatsApp/Discord ile ilgili kişiye iletir.
