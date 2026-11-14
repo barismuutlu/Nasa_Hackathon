@@ -1,0 +1,125 @@
+{
+  "region": "argentina",
+  "unit": "harmonized (MODIS-equivalent) detections, 1deg cell-month, log1p",
+  "train_from": 2003,
+  "test_years": [
+    2015,
+    2025
+  ],
+  "n_cells": 230,
+  "skill_by_lead": {
+    "1": 0.25,
+    "2": 0.131,
+    "3": 0.082,
+    "4": 0.059,
+    "5": 0.043,
+    "6": 0.036,
+    "7": 0.027,
+    "8": 0.022,
+    "9": 0.021,
+    "10": 0.024,
+    "11": 0.027,
+    "12": 0.024
+  },
+  "region_total_mae_log": {
+    "1": {
+      "model": 0.482,
+      "climatology": 0.533
+    },
+    "2": {
+      "model": 0.512,
+      "climatology": 0.533
+    },
+    "3": {
+      "model": 0.52,
+      "climatology": 0.533
+    },
+    "4": {
+      "model": 0.525,
+      "climatology": 0.533
+    },
+    "5": {
+      "model": 0.531,
+      "climatology": 0.533
+    },
+    "6": {
+      "model": 0.54,
+      "climatology": 0.533
+    },
+    "7": {
+      "model": 0.544,
+      "climatology": 0.533
+    },
+    "8": {
+      "model": 0.536,
+      "climatology": 0.533
+    },
+    "9": {
+      "model": 0.541,
+      "climatology": 0.533
+    },
+    "10": {
+      "model": 0.538,
+      "climatology": 0.533
+    },
+    "11": {
+      "model": 0.536,
+      "climatology": 0.533
+    },
+    "12": {
+      "model": 0.54,
+      "climatology": 0.533
+    }
+  },
+  "interval_logerr_q10_q90": {
+    "1": [
+      -0.452,
+      1.009
+    ],
+    "2": [
+      -0.495,
+      1.1
+    ],
+    "3": [
+      -0.442,
+      1.17
+    ],
+    "4": [
+      -0.473,
+      1.21
+    ],
+    "5": [
+      -0.492,
+      1.319
+    ],
+    "6": [
+      -0.565,
+      1.226
+    ],
+    "7": [
+      -0.488,
+      1.235
+    ],
+    "8": [
+      -0.538,
+      1.223
+    ],
+    "9": [
+      -0.535,
+      1.264
+    ],
+    "10": [
+      -0.524,
+      1.245
+    ],
+    "11": [
+      -0.535,
+      1.236
+    ],
+    "12": [
+      -0.536,
+      1.23
+    ]
+  },
+  "note": "skill = 1 - MSE_model/MSE_climatology; <= 0 means no better than climatology. Prototype: no weather/fuel/ignition inputs; not a fire prediction."
+}
