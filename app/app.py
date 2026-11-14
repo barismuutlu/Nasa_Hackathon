@@ -168,15 +168,36 @@ with col_cal:
     ))
     # Streamlit heatmap tıklamasını yakalamıyor → her hücreye görünmez tıklanabilir nokta
     gy, gx = np.meshgrid(shown.index.astype(str), MONTHS, indexing="ij")
+    # kısmi aylar: verinin / seçili aralığın ilk ve son ayı tam kapsanmıyorsa işaretle
+    cov0 = max(pd.Timestamp(d0), INFO["start"])
+    cov1 = min(pd.Timestamp(d1), INFO["end"])
+    notes = np.full(z.shape, "", dtype=object)
+    for i, yy in enumerate(shown.index):
+        for j, mm in enumerate(shown.columns):
+            if not np.isfinite(z[i, j]):
+                continue
+            m0 = pd.Timestamp(int(yy), int(mm), 1)
+            m1 = m0 + pd.offsets.MonthEnd(0)
+            a0, a1 = max(m0, cov0), min(m1, cov1)
+            if a0 > m0 or a1 < m1:
+                notes[i, j] = f"<br>⚠ kısmi ay / partial month: {a0:%d.%m}–{a1:%d.%m}"
+    part = notes != ""
+    if part.any():
+        fig.add_trace(go.Scatter(
+            x=gx[part], y=gy[part], mode="text", text=["•"] * int(part.sum()),
+            textfont=dict(size=22, color="white"), hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter(
-        x=gx.ravel(), y=gy.ravel(), mode="markers", customdata=z.ravel(), showlegend=False,
+        x=gx.ravel(), y=gy.ravel(), mode="markers", showlegend=False,
+        customdata=np.stack([z.ravel(), notes.ravel()], axis=-1),
         marker=dict(symbol="square", size=18, color="rgba(0,0,0,0)"),
-        hovertemplate="Yıl/Year %{y}<br>Ay/Month %{x}<br>Tespit/Detections %{customdata:.1f}<extra></extra>",
+        hovertemplate="Yıl/Year %{y}<br>Ay/Month %{x}<br>Tespit/Detections %{customdata[0]:.1f}"
+                      "%{customdata[1]}<extra></extra>",
     ))
     fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10), clickmode="event+select",
                       plot_bgcolor="#cccccc", yaxis=dict(autorange="reversed", dtick=2))
     ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal")
-    st.caption("Bir hücreye tıkla → anomali kartı / Click a cell → anomaly card")
+    st.caption("Bir hücreye tıkla → anomali kartı / Click a cell → anomaly card · "
+               "• = kısmi ay, sayı tam aydan düşük olabilir / partial month")
     pts_sel = (ev or {}).get("selection", {}).get("points", []) if ev else []
     if pts_sel:
         p0 = pts_sel[0]
@@ -226,11 +247,14 @@ st.session_state.setdefault("sel_month", 8)
 yr = c1.selectbox("Yıl / Year", years, key="sel_year")
 mo = c2.selectbox("Ay / Month", list(range(1, 13)), format_func=lambda i: MONTHS[i - 1], key="sel_month")
 a = anomaly(mat, yr, mo)
-k1, k2, k3 = st.columns(3)
-diff = a["value"] - a["mean"] if np.isfinite(a.get("value", np.nan)) else np.nan
-k1.metric("Tespit / Detections", fmt(a["value"]),
-          None if fmt(diff) == "–" else f"{diff:+.1f} vs ort./mean")
-k2.metric("z-skoru / z-score", fmt(a["z"], ".2f"))
-rank = f"sıra/rank {a['rank']}/{a['n_years']}" if a.get("rank") is not None else None
-k3.metric("Durum / Label", a["label"], rank, delta_color="off")
-st.caption(f"Ortalama ± std / Mean ± std: {fmt(a['mean'])} ± {fmt(a['std'])} ({a['n_years']} yıl / years)")
+k1, k2, k3, k4 = st.columns(4)
+val, mean = a.get("value"), a.get("mean")
+# sıfıra yakın tabanda z anlamsız büyür → ana gösterim sıra + "ortalamanın kaç katı"
+ratio = val / mean if (fmt(val) != "–" and fmt(mean) != "–" and mean > 0) else None
+k1.metric("Tespit / Detections", fmt(val))
+k2.metric("Sıra / Rank", f"{a['rank']}/{a['n_years']}" if a.get("rank") is not None else "–",
+          help="1 = bu ay için en yüksek yıl / 1 = highest year for this month")
+k3.metric("Ortalamanın katı / × mean", (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×") if ratio is not None else "–")
+k4.metric("Durum / Label", a["label"])
+st.caption(f"Ortalama ± std / Mean ± std: {fmt(mean)} ± {fmt(a['std'])} ({a['n_years']} yıl / years)"
+           f" · z = {fmt(a['z'], '.1f')}")
