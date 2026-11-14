@@ -19,26 +19,30 @@ LABEL_EN = {"çok yüksek": "very high", "yüksek": "high", "normal": "normal", 
             "tespit yok": "no detections", "veri yok": "no data"}
 RAW, HARM = "Raw", "Harmonized"
 C_RAW, C_HARM = "#440154", "#21918c"  # viridis ends, used consistently for the two series
+# calendar colour scale: fire palette, pale yellow = fewest detections → dark red = most
+FIRE_SCALE = [[0.0, "#fff7c2"], [0.25, "#ffd84a"], [0.5, "#fe9b2d"], [0.75, "#d93806"], [1.0, "#7a0403"]]
+C_FRAME = "#ff9f1c"  # region frame on satellite imagery
+C_NODATA = "#2a2d36"  # calendar background (no data)
 
 st.set_page_config(page_title="Active Fire Detection Calendar", page_icon=":material/local_fire_department:",
                    layout="wide")
 st.markdown("""<style>
 [data-testid="stStatusWidget"] {visibility: hidden; height: 0;}
 .kicker {font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .78rem;
-         letter-spacing: .08em; text-transform: uppercase; color: #46327e; margin-bottom: -.4rem;}
-.abstract {color: #4a4560; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .6rem 0;}
-.figcap {color: #5b5670; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
-.figcap b {color: #1e1b2e;}
+         letter-spacing: .08em; text-transform: uppercase; color: #b5de2b; margin-bottom: -.4rem;}
+.abstract {color: #b8b5c8; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .6rem 0;}
+.figcap {color: #9a97ad; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
+.figcap b {color: #e8e6f0;}
 [data-testid="stMetricValue"] {font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
                                font-variant-numeric: tabular-nums;}
-[data-testid="stMetricLabel"] p {color: #5b5670; text-transform: uppercase; font-size: .74rem; letter-spacing: .05em;}
+[data-testid="stMetricLabel"] p {color: #9a97ad; text-transform: uppercase; font-size: .74rem; letter-spacing: .05em;}
 [data-testid="stSidebar"] h3 {font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
-                              color: #46327e; margin-top: .6rem;}
+                              color: #b5de2b; margin-top: .6rem;}
 .dossier {font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .84rem;
-          font-variant-numeric: tabular-nums; line-height: 1.6; color: #2c2840;}
+          font-variant-numeric: tabular-nums; line-height: 1.6; color: #d6d3e4;}
 .dossier td {padding: 1px 14px 1px 0; border: none;}
 .dossier tr {border: none;}
-.dossier .k {color: #7a7590;}
+.dossier .k {color: #8a879c;}
 </style>""", unsafe_allow_html=True)
 
 
@@ -202,11 +206,25 @@ AREA = (_bounds(st.session_state["drawn"]) if st.session_state.get("drawn") else
 AREA_TXT = (f"{AREA[0][0]:.2f}–{AREA[1][0]:.2f}° lat, {AREA[0][1]:.2f}–{AREA[1][1]:.2f}° lon"
             + (" (drawn)" if st.session_state.get("drawn") else ""))
 
-col_map, col_cal = st.columns([1, 1])
+# map on top (full width), calendar below
+col_map, col_cal = st.container(), st.container()
 with col_map.container(border=True):
     st.subheader("Spatial distribution")
-    m = folium.Map(tiles="OpenStreetMap")
-    folium.Rectangle([[y0, x0], [y1, x1]], color=C_RAW, fill=False, weight=2).add_to(m)
+    m = folium.Map(tiles=None)
+    _esri = "https://server.arcgisonline.com/ArcGIS/rest/services"
+    folium.TileLayer(f"{_esri}/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}", name="Satellite",
+                     attr="Imagery © Esri, Maxar, Earthstar Geographics").add_to(m)
+    folium.TileLayer(f"{_esri}/Reference/World_Boundaries_and_Places/MapServer/tile/{{z}}/{{y}}/{{x}}",
+                     name="Labels", attr="© Esri", overlay=True, control=False).add_to(m)
+    # preset region: thin outline + corner brackets + detection-count badge
+    folium.Rectangle([[y0, x0], [y1, x1]], color=C_FRAME, fill=False, weight=1, opacity=0.6).add_to(m)
+    _dx, _dy = (x1 - x0) * 0.12, (y1 - y0) * 0.12
+    for cx, cy, sx, sy in [(x0, y0, 1, 1), (x1, y0, -1, 1), (x0, y1, 1, -1), (x1, y1, -1, -1)]:
+        folium.PolyLine([[cy + sy * _dy, cx], [cy, cx], [cy, cx + sx * _dx]], color=C_FRAME, weight=5).add_to(m)
+    folium.Marker([y1, x1], icon=folium.DivIcon(icon_size=(0, 0), html=(
+        '<div style="transform:translate(-100%,6px);display:inline-block;white-space:nowrap;'
+        'background:#b3261e;color:#fff;font:600 12px ui-monospace,Menlo,monospace;'
+        f'padding:3px 7px;border-radius:3px;">{len(df_map):,}</div>'))).add_to(m)
     # drawn area lives in Draw's OWN layer → the trash tool can delete it
     drawn_fg = folium.FeatureGroup(name="drawn")
     if st.session_state.get("drawn"):
@@ -224,7 +242,7 @@ with col_map.container(border=True):
     pts = df_map.sample(MAX_POINTS, random_state=0) if len(df_map) > MAX_POINTS else df_map
     if len(pts):
         HeatMap(pts[["latitude", "longitude"]].to_numpy().tolist(), radius=8, blur=10, min_opacity=0.35,
-                gradient={0.2: "#3b528b", 0.45: "#21918c", 0.7: "#5ec962", 1.0: "#fde725"}).add_to(m)
+                gradient={0.2: "#7a0403", 0.45: "#d93806", 0.7: "#fe9b2d", 0.9: "#ffd84a", 1.0: "#fff7c2"}).add_to(m)
     # only drawing events are returned → pan/zoom does not rerun the page
     out = st_folium(m, height=480, use_container_width=True, returned_objects=["all_drawings"],
                     key=f"map_{preset}_{st.session_state['map_ver']}")
@@ -244,13 +262,21 @@ with col_map.container(border=True):
     sampled = f"; heat layer from a {MAX_POINTS:,}-point sample" if len(df_map) > MAX_POINTS else ""
     figcap(1, "Detection density.",
            f"{len(df_map):,} {'harmonized (weight > 0)' if mode == 'harm' else 'raw'} detections, "
-           f"{d0:%Y-%m-%d} → {d1:%Y-%m-%d}{sampled}. Box: preset region. "
+           f"{d0:%Y-%m-%d} → {d1:%Y-%m-%d}{sampled}. Frame: preset region; badge: detections shown. "
+           "Basemap: Esri World Imagery. "
            "Draw a rectangle or polygon to analyse a custom area.")
     if preset == "Aachen/Eifel":
         st.caption("Note: the NW corner of the box (Aachen city, north of ≈50.73°N / west of 6.10°E) is outside "
                    "the download area; empty cells there mean no data, not zero detections.")
 
 with st.sidebar:
+    st.subheader("Statistics")
+    _conf = df["confidence_class"].astype(str).value_counts() if len(df) else {}
+    st.caption(f"Raw detections in selection: **{len(df):,}** · by FIRMS confidence")
+    st.markdown('<table class="dossier" style="width:100%;text-align:center"><tr>' + "".join(
+        f'<td style="padding:0"><span class="k">{_cls.upper()}</span><br>'
+        f'<span style="font-size:1.15rem;font-weight:650">{int(_conf.get(_cls, 0)):,}</span></td>'
+        for _cls in ["low", "nominal", "high"]) + "</tr></table>", unsafe_allow_html=True)
     st.subheader("Export")
     st.download_button("Download CSV", data=lambda: to_csv_bytes(df), icon=":material/download:",
                        file_name=f"hotspots_{preset}_{mode}.csv", mime="text/csv", disabled=df.empty)
@@ -303,7 +329,7 @@ def calendar_and_anomaly(df, mode, d0, d1):
                     zz = anomaly(mat, yy, mm).get("z")
                     zc[i, j] = zz if zz is not None and np.isfinite(zz) else np.nan
         hm = dict(zmin=-3, zmax=3, colorbar=dict(title="z"))
-    fig = go.Figure(go.Heatmap(z=zc, x=MONTHS, y=shown.index.astype(str), colorscale="Viridis",
+    fig = go.Figure(go.Heatmap(z=zc, x=MONTHS, y=shown.index.astype(str), colorscale=FIRE_SCALE,
                                hoverinfo="skip", **hm))
     # Streamlit does not capture heatmap clicks → an invisible clickable marker on every cell
     gy, gx = np.meshgrid(shown.index.astype(str), MONTHS, indexing="ij")
@@ -321,14 +347,14 @@ def calendar_and_anomaly(df, mode, d0, d1):
     part = notes != ""
     if part.any():
         fig.add_trace(go.Scatter(x=gx[part], y=gy[part], mode="text", text=["•"] * int(part.sum()),
-                                 textfont=dict(size=22, color="white"), hoverinfo="skip", showlegend=False))
+                                 textfont=dict(size=22, color="#1e1b2e"), hoverinfo="skip", showlegend=False))
     fig.add_trace(go.Scatter(
         x=gx.ravel(), y=gy.ravel(), mode="markers", showlegend=False,
         customdata=np.stack([z.ravel(), notes.ravel()], axis=-1),
         marker=dict(symbol="square", size=18, color="rgba(0,0,0,0)"),
         hovertemplate="%{x} %{y}<br>" + unit + ": %{customdata[0]:,.1f}%{customdata[1]}<extra></extra>"))
     fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10), clickmode="event+select",
-                      plot_bgcolor="#d9d6e0",
+                      plot_bgcolor=C_NODATA,
                       yaxis=dict(range=[int(shown.index.max()) + 0.5, int(shown.index.min()) - 0.5], dtick=2))
     ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal")
     figcap(2, f"Monthly {'raw detections' if mode == 'raw' else 'harmonized (MODIS-equivalent) estimate'}.",
@@ -414,8 +440,16 @@ def annual_chart(df, d0, d1):
                      xaxis_title="Year",
                      yaxis=dict(title="Detections per year" + (" (log)" if log_y else ""),
                                 type="log" if log_y else "linear"),
-                     legend=dict(orientation="h", y=-0.2))
-    st.plotly_chart(fy, width="stretch")
+                     legend=dict(orientation="h", y=-0.2),
+                     # light card on the dark page: the two viridis series colours need a white ground
+                     template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
+                     font=dict(family='"Source Sans Pro", "Source Sans 3", sans-serif', size=13,
+                               color="rgba(49,51,63,0.6)"),
+                     hoverlabel=dict(bgcolor="#ffffff", font=dict(color="#1e1b2e")))
+    fy.update_traces(marker=dict(size=8))
+    fy.update_xaxes(showgrid=False, zeroline=False, ticks="", title_font=dict(size=15))
+    fy.update_yaxes(gridcolor="#e6eaf1", zeroline=False, ticks="", title_font=dict(size=15))
+    st.plotly_chart(fy, width="stretch", theme=None)
     figcap(3, "Annual totals.", "Dashed lines: start of each VIIRS satellite (from the data). Raw counts step up "
            "with every new sensor; the harmonized series should not. First and last years are partial.")
 
