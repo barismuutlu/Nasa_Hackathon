@@ -1,6 +1,6 @@
 # P6 — Sunum & Test: İbrahim
 
-Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolün.
+Ortak kurallar ve takvim kök `CLAUDE.md`'de, terminoloji **`docs/CONTRACT.md` §8**'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
 - `docs/pitch/` (slaytlar, görseller, metinler, demo senaryosu, test notları)
@@ -47,3 +47,6 @@ Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolü
 - Sayıları (R², bias, sayımlar) uydurma; sadece `docs/validation/metrics.json`'dan al,
   yoksa `[TBD — Oğuzhan]` bırak.
 - Görsellerde NASA logosu kullanma; kaynak olarak "NASA FIRMS / Worldview" yaz.
+- Terminoloji (CONTRACT §8): tespit/hotspot ≠ doğrulanmış yangın olayı. Harmonizasyonu
+  "doğrulanmış" diye sunma; "Arjantin'de kalibre, 2022–2024 testinde R²=…" gibi sayıyla anlat.
+- Sentetik (mock) veriden ekran görüntüsü sunuma girmez (sayfada "SENTETİK" uyarısı varsa kullanma).

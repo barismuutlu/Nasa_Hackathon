@@ -1,6 +1,6 @@
 # P3 — ML & Doğrulama: Oğuzhan
 
-Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolün.
+Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md` v1.1**'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
 - `pipeline/validate.py`
@@ -10,7 +10,7 @@ Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolü
 - Girdi: `data/monthly_grid.parquet`, `data/hotspots_harm.parquet`, `data/k_factors.csv` (P2).
   P2 hazır olana kadar mock/sample veriyle iskeleti kur.
 - Çıktılar (`docs/validation/`, git'e commit):
-  - `metrics.json` — `{"method", "r2", "bias", "bias_pct", "n_cells", "split"}` (bölge bazında da)
+  - `metrics.json` — CONTRACT §7.3: `[{"method","region","split","scale","r2","bias","bias_pct","n"}]`
   - `pred_vs_true.png` — tahmin (`n_harm` VIIRS'ten) vs gerçek (`n_modis`) saçılım, log-log, 1:1 çizgisi
   - `annual_raw_vs_harm.png` — Arjantin yıllık ham / harmonize / MODIS
   - `venn_check.png` — Hohes Venn takvim kesiti (Nisan 2011, Ağustos 2026)
@@ -26,8 +26,8 @@ Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolü
    Nisan 2011 (sadece MODIS dönemi) ve Ağustos 2026 (VIIRS) ham + harmonize sayılarda görünüyor mu?
    O ayın anomali z-skoru ne? Sonuç: evet/hayır + sayılar.
 5. **Zaman kalırsa: Yöntem B** — lojistik regresyon (scikit-learn): VIIRS tespiti için
-   p(aynı gün ±1 km içinde MODIS tespiti var). Özellikler: `frp, bright, scan, track, daynight,
-   satellite, lat_band, season`. Ağırlık = p / n_active_viirs. Aynı metriklerle A vs B tablosu.
+   p(aynı gün ±1 km içinde MODIS tespiti var). Özellikler: `frp, brightness, scan, track, daynight,
+   satellite, enlem bandı, mevsim`. (`brightness` MODIS ile VIIRS arasında karşılaştırılamaz, dikkat.) Ağırlık = p / n_active_viirs. Aynı metriklerle A vs B tablosu.
    → Barış'a söyle; seçilirse P2 entegre eder.
 
 ## Teslimler
@@ -45,3 +45,4 @@ Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolü
 - `harmonize.py`'yi değiştirme; k yöntemi hakkında öneri varsa kullanıcıya not olarak ver.
 - Grafiklerde matplotlib, renk haritası viridis (uygulamayla tutarlı).
 - R² negatif/çok düşük çıkarsa saklama — kullanıcıya açıkça söyle; pitch'te dürüstçe anlatılır.
+- Venn sonucunu "tespit artışı" olarak yaz, "yangın tespit edildi" değil (CONTRACT §8).

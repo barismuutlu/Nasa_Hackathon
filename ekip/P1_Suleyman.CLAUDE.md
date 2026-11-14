@@ -1,45 +1,56 @@
 # P1 — Veri Mühendisi: Süleyman
 
-Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolün.
+Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md` v1.1**'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
 - `pipeline/ingest.py`
 - `data/sample/` (örnek çıktı)
 
+## Girdi / çıktı (CONTRACT §7.1)
+- Girdi: `data/raw/<region>/*.csv` — klasör adı = `region` değeri (`germany`, `belgium`, `argentina`)
+- Çıktı: `data/hotspots.parquet` — CONTRACT §1, yazmadan önce `validate_hotspots(df, "ingest")`
+- Çıktı: `data/satellite_coverage.csv` — `satellite, source, first_date, last_date, n_rows, nrt_cutoff, n_nrt_dropped`
+
 ## Görev
-FIRMS CSV'lerini (`data/raw/`) okuyup tek ortak şemaya çevir → `data/hotspots.parquet`
-(şema: kök `CLAUDE.md` §3.1 — sütun adı/tipi birebir).
+1. **Veri** (CONTRACT §5) — İbrahim FIRMS ülke dosyalarını indiriyor; onunla konuş, dosyaları
+   `data/raw/germany/`, `data/raw/belgium/`, `data/raw/argentina/` altına koyun.
+   - **Belçika şart:** Hohes Venn'in büyük kısmı Belçika'da; Almanya dosyası Venn'i içermez.
+2. **Okuma** — sabitleri `contract.py`'den al, kendin yazma:
+   - Enstrüman sütunlardan: `brightness` → MODIS, `bright_ti4` → VIIRS.
+   - `satellite` → `SATELLITE_CODES` ile; bilinmeyen kod → `ValueError`.
+   - `confidence` = **orijinal değer, string** (MODIS `"85"`, VIIRS `"n"`).
+     `confidence_class`: MODIS → `modis_confidence_class()`, VIIRS → `VIIRS_CONFIDENCE_CLASS`.
+   - `brightness` = MODIS `brightness` / VIIRS `bright_ti4`; `brightness_2` = `bright_t31` / `bright_ti5`.
+   - `version` = FIRMS `version` (string), `type` = archive `type` (NRT'de `<NA>`).
+   - `datetime_utc` = `acq_date` + `acq_time` (HHMM), UTC.
+   - `source`: dosya adında `archive` → `"archive"`, `nrt` → `"nrt"`.
+   - `weight_harm` = NaN (float32). Harmonize etme, P2'nin işi.
+3. **Tekrar silme** (CONTRACT §4)
+   - 4a: anahtar `(satellite, datetime_utc, round(latitude,4), round(longitude,4))` → ilki kalır.
+   - 4b: her uydu için `cutoff = archive'deki son acq_date`; o uydunun `acq_date ≤ cutoff` NRT satırları atılır.
+   - Farklı uydu ya da farklı zaman olan satırları **asla** birleştirme.
+4. **Özet yazdır** — uydu × yıl satır sayısı, sebebe göre atılan satırlar,
+   `satellite_coverage.csv` → Bahtiyar'a haber ver (S-NPP son tarihi ~2026-11-02 olmalı).
 
-1. **Okuma** — MODIS (C6.1) + VIIRS S-NPP / NOAA-20 / NOAA-21 (C2), hem `archive` hem `nrt`.
-   - Enstrümanı dosya adından değil **sütunlardan** tanı: `brightness` → MODIS, `bright_ti4` → VIIRS.
-   - `source`: dosya adında `archive` → `"archive"`, `nrt` → `"nrt"`; yoksa `type` sütunu varsa archive.
-   - `satellite` normalizasyonu: `Terra/T` → Terra, `Aqua/A` → Aqua, `N/SNPP/Suomi NPP` → SNPP,
-     `N20/1/J1/NOAA-20` → NOAA20, `N21/2/J2/NOAA-21` → NOAA21. Bilinmeyen değer → `ValueError`.
-   - `confidence`: MODIS sayı → <30 low, 30–79 nominal, ≥80 high; VIIRS `l/n/h` → low/nominal/high.
-   - `bright` = MODIS `brightness` / VIIRS `bright_ti4`.
-2. **Birleştirme + tekrar silme** — archive ve nrt çakışır.
-   Anahtar: `(satellite, round(lat,4), round(lon,4), acq_date, acq_time)`; çakışmada **archive kalır**.
-3. **Yazma** — `weight_harm = NaN` (float32), kategorik sütunlar `category`, parquet `pyarrow`, `snappy`.
-4. **Özet yazdır** — uydu × yıl satır sayısı tablosu + her uydunun ilk/son tarihi
-   (P2 `n_active_viirs` için bunu kullanacak → Bahtiyar'a gönder).
-
-## Kapsam (Barış ile teyit et)
-Arjantin (eğitim, tam 2000–2026) + Almanya + Belçika (Venn/Eifel). Global indirme YAPMA.
+## İlk iş: başlık kontrolü
+İlk gerçek CSV'yi indirince başlık satırını ve `satellite`, `confidence`, `version` alanlarındaki
+farklı değerleri yazdır, CONTRACT §1/§3 ile karşılaştır. Fark varsa **önce Barış'a söyle**,
+sonra koda geç (sözleşme belgeden yazıldı, gerçek dosya görülmedi).
 
 ## Teslimler
 | Saat | Ne | Kime |
 |---|---|---|
-| 11:30 | `data/sample/hotspots_sample.parquet` (1 bölge, 1 yıl, ör. La Rioja 2020) — git'e commit | herkes |
-| 12:30 | `data/hotspots.parquet` tam veri — Drive/USB | herkes |
-| 12:30 | uydu ilk/son tarih tablosu | Bahtiyar (P2) |
+| 11:30 | `data/sample/hotspots_sample.parquet` (La Rioja 2020) + başlık kontrolü sonucu | herkes, Barış |
+| 12:30 | `data/hotspots.parquet` tam veri (Drive/USB) | herkes |
+| 12:30 | `data/satellite_coverage.csv` | Bahtiyar (P2) |
 
 ## Bitti kontrolü
-- [ ] Sütun adları/tipleri §3.1 ile birebir (`df.dtypes` yazdır, karşılaştır)
-- [ ] Tekrar yok: anahtar üzerinde `duplicated().sum() == 0`
-- [ ] Hohes Venn (lat 50.45–50.60, lon 5.95–6.25) Nisan 2011'de MODIS tespiti var mı? → sonucu Barış'a söyle
+- [ ] `validate_hotspots(df, "ingest")` hatasız geçiyor
+- [ ] Anahtar üzerinde `duplicated().sum() == 0`; archive/NRT kesim tarihleri özette
+- [ ] Hohes Venn (lon 5.95–6.25, lat 50.45–50.60) Nisan 2011'de MODIS tespiti var mı? → Barış'a söyle
 - [ ] `python pipeline/ingest.py` temiz ortamda baştan sona çalışıyor
 
 ## Claude'a not
-- Sadece pandas/pyarrow/numpy kullan. Yeni paket gerekiyorsa yazma, "Barış'a söyle" de.
-- Şema değişikliği gerekirse kod yazma; kullanıcıya P4'e sormasını söyle.
-- CSV'ler büyükse `usecols` + `dtype` ile oku, dosya dosya işle, sonra `concat`.
+- `contract.py`'yi import et (kök CLAUDE.md §3.2), değiştirme. Sözleşmeye uymayan durum → Barış'a sor.
+- Sadece pandas/pyarrow/numpy. Yeni paket gerekiyorsa yazma, "Barış'a söyle" de.
+- Büyük CSV'leri `usecols` + `dtype` ile oku; `confidence`'ı **string** oku (`dtype={"confidence": str}`).
