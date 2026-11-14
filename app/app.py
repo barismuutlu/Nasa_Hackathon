@@ -1,4 +1,5 @@
 """P5 — Streamlit UI: MODIS ↔ VIIRS active fire detection calendar (English-only, scientific layout)."""
+import base64
 import json
 from pathlib import Path
 
@@ -33,7 +34,10 @@ st.markdown("""<style>
 .abstract {color: #c9c3b8; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .2rem 0;}
 .facts {color: #a39d92; font-size: .92rem; line-height: 1.5; max-width: 980px; margin: 0 0 .8rem 0;}
 .facts b {color: #ece7de; font-weight: 600;}
-.subtitle {color: #a39d92; font-size: 1.0rem; margin: -.5rem 0 1rem 0;}
+[data-testid="stMainBlockContainer"] {padding-top: 1.1rem;}  /* no empty band above the logo */
+[data-testid="stHeader"] {background: transparent; height: 2.2rem;}
+.brand img {height: 92px; width: auto; display: block; pointer-events: none; user-select: none;}
+.subtitle {color: #a39d92; font-size: 1.0rem; margin: .1rem 0 .6rem 0;}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
@@ -96,8 +100,10 @@ def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=Tr
 # ---------- Header ----------
 if INFO.get("is_mock"):
     st.warning("SYNTHETIC TEST DATA — not for interpretation")
-st.image(str(LOGO), width=440)
-st.markdown('<div class="subtitle">Active Fire Detection Calendar, 2000–2026</div>', unsafe_allow_html=True)
+# plain <img> instead of st.image: fixed size, no hover "enlarge" button
+st.markdown(f'<div class="brand"><img alt="FireWatch" src="data:image/png;base64,'
+            f'{base64.b64encode(LOGO.read_bytes()).decode()}"></div>'
+            '<div class="subtitle">Active Fire Detection Calendar, 2000–2026</div>', unsafe_allow_html=True)
 
 st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
