@@ -20,10 +20,11 @@ LOW_MEAN, MAX_RATIO = 1.0, 100  # baseline < 1 AND ratio ≥ 100 → show "typic
 LABEL_EN = {"çok yüksek": "very high", "yüksek": "high", "normal": "normal", "düşük": "low",
             "tespit yok": "no detections", "veri yok": "no data"}
 RAW, HARM = "Raw", "Harmonized"
-C_RAW, C_HARM = "#440154", "#21918c"  # viridis ends, used consistently for the two series
+C_RAW, C_HARM = "#cdc4b2", "#e8833a"  # raw = pale sand, harmonized = theme orange (both read on the dark page)
 # calendar colour scale: fire palette, pale yellow = fewest detections → dark red = most
 FIRE_SCALE = [[0.0, "#fff7c2"], [0.25, "#ffd84a"], [0.5, "#fe9b2d"], [0.75, "#d93806"], [1.0, "#7a0403"]]
 C_FRAME = "#ff9f1c"  # region frame on satellite imagery
+C_DRAWN = "#21918c"  # user-drawn area: teal stays visible on top of the orange heat layer
 C_NODATA = "#34322e"  # calendar background (no data)
 LOGO = Path(__file__).parent / "assets" / "firewatch_logo.png"  # transparent PNG, sits on the page background
 
@@ -218,7 +219,7 @@ with col_map.container(border=True):
         g = json.loads(st.session_state["drawn"])
         polys = [g["coordinates"]] if g.get("type") == "Polygon" else g.get("coordinates", [])
         for ring in (poly[0] for poly in polys if poly):
-            folium.Polygon([[lat, lon] for lon, lat in ring], color=C_HARM, weight=3,
+            folium.Polygon([[lat, lon] for lon, lat in ring], color=C_DRAWN, weight=3,
                            fill=True, fill_opacity=0.1).add_to(drawn_fg)
     m.fit_bounds(AREA)
     drawn_fg.add_to(m)
@@ -407,10 +408,9 @@ def annual_chart(df, d0, d1):
     if "SNPP" in rng and rng["SNPP"][1] < INFO["end"] - pd.Timedelta(days=3):
         marks.append((_frac_year(rng["SNPP"][1]), "S-NPP ends"))
     for k, (xv, lbl) in enumerate(marks):
-        fy.add_vline(x=xv, line_dash="dash", line_color="#888")
+        fy.add_vline(x=xv, line_dash="dot", line_width=1.2, line_color="#6f6a61")
         fy.add_annotation(x=xv, y=1.0 if k % 2 == 0 else 1.09, yref="paper", text=lbl, showarrow=False,
-                          xanchor="right", yanchor="bottom", font=dict(size=11, color="#666"),
-                          bgcolor="rgba(255,255,255,0.8)")
+                          xanchor="right", yanchor="bottom", font=dict(size=11, color="#a39d92"))
     log_y = st.toggle("Log axis", key="annual_log",
                       help="On a log axis an equal ratio (e.g. 4×) has equal height at every level.")
     fy.update_layout(height=420, margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
@@ -418,14 +418,13 @@ def annual_chart(df, d0, d1):
                      yaxis=dict(title="Detections per year" + (" (log)" if log_y else ""),
                                 type="log" if log_y else "linear"),
                      legend=dict(orientation="h", y=-0.2),
-                     # light card on the dark page: the two viridis series colours need a white ground
-                     template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
-                     font=dict(family='"Source Sans Pro", "Source Sans 3", sans-serif', size=13,
-                               color="rgba(49,51,63,0.6)"),
-                     hoverlabel=dict(bgcolor="#ffffff", font=dict(color="#1e1b2e")))
+                     # same ground as the page and the calendar: transparent, warm grey text
+                     template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                     font=dict(family='"Source Sans Pro", "Source Sans 3", sans-serif', size=13, color="#a39d92"),
+                     hoverlabel=dict(bgcolor="#272522", bordercolor="#3b3834", font=dict(color="#ece7de")))
     fy.update_traces(marker=dict(size=8))
     fy.update_xaxes(showgrid=False, zeroline=False, ticks="", title_font=dict(size=15))
-    fy.update_yaxes(gridcolor="#e6eaf1", zeroline=False, ticks="", title_font=dict(size=15))
+    fy.update_yaxes(gridcolor="#34322e", zeroline=False, ticks="", title_font=dict(size=15))
     st.plotly_chart(fy, width="stretch", theme=None)
     figcap(3, "Annual totals.", "Dashed lines: start of each VIIRS satellite (from the data). Raw counts step up "
            "with every new sensor; the harmonized series should not. First and last years are partial.")
