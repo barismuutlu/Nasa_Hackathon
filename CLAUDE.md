@@ -88,13 +88,20 @@ docs/pitch/       P6
 ## 4. `app/query.py` API (P5 SADECE bunları kullanır)
 ```python
 PRESETS: dict[str, tuple[float, float, float, float]]   # ad -> (lon_min, lat_min, lon_max, lat_max)
+                                                        # "Hohes Venn", "Aachen/Eifel", "La Rioja (AR)"
+data_info() -> dict
+    # {"path", "is_mock", "has_harm", "start", "end", "n_rows", "satellites"} → is_mock ise uyarı göster
 get_hotspots(geom, start=None, end=None, harmonized=False) -> pd.DataFrame
-    # geom: bbox tuple veya GeoJSON Polygon dict (streamlit-folium çiziminden)
+    # geom: PRESETS adı, bbox tuple ya da GeoJSON (Feature/Polygon — streamlit-folium çizimi direkt)
+    # harmonized=True → sadece weight_harm > 0 satırlar (harita için)
 monthly_matrix(df, mode="raw") -> pd.DataFrame
     # index=year, columns=1..12; mode="raw": satır sayısı (tüm uydular), mode="harm": Σ weight_harm
+    # veri kapsamı dışı aylar NaN, kapsam içinde tespit yoksa 0; harmonize veri yoksa "harm" hep NaN
 anomaly(matrix, year, month) -> dict
     # {"value", "mean", "std", "z", "rank", "n_years", "label"}; taban = aynı ayın diğer yılları
+    # label: "çok yüksek" | "yüksek" | "normal" | "düşük" | "tespit yok" | "veri yok"
 to_csv_bytes(df) -> bytes
+MONTH_LABELS  # ["Oca", ..., "Ara"]
 ```
 Veri kaynağı önceliği: `$HOTSPOTS_PATH` → `data/hotspots_harm.parquet` → `data/hotspots.parquet`
 → `data/deploy/…` → `data/mock/hotspots_mock.parquet`.
