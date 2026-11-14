@@ -1,127 +1,129 @@
-# MODIS ve VIIRS Aktif Yangın Tespitlerinin Harmonizasyonu
+# Harmonizing MODIS and VIIRS Active Fire Detections
 
 **NASA Space Apps Challenge 2026 — "Harmonization of MODIS and VIIRS Hot Spots"**
 
-> **Canlı demo:** https://nasahackathon-6dh2dds5wpz3r6q9mz5zx3.streamlit.app/ · **Sunum:** _[link — yakında]_
+> **Live demo:** https://activefiredetectioncalendar.streamlit.app/ · **Presentation:** _[link — coming soon]_
 
-NASA'nın 25 yıllık yangın kaydı, sürekli değişen uydularla oluşturuldu. MODIS (Terra 2000, Aqua 2002)
-görev ömrünün sonuna yaklaşıyor; VIIRS cihazları (Suomi NPP 2012, NOAA-20 2018, NOAA-21 2023) ise çok
-daha hassas. Her yeni uydu devreye girdiğinde **ham tespit sayısı sıçrıyor — yerde hiçbir şey
-değişmemiş olsa bile.** Ham sayılardan çizilen bir trend çizgisi 2012'den sonra yangın aktivitesinin
-keskin biçimde arttığını gösterir; bunun bir kısmı sadece daha çok ve daha iyi sensörün bakıyor olmasıdır.
+NASA's 25-year fire record was built by a changing fleet of satellites. MODIS (Terra 2000, Aqua 2002)
+is nearing the end of its mission; the VIIRS instruments (Suomi NPP 2012, NOAA-20 2018, NOAA-21 2023)
+are far more sensitive. Every time a new satellite comes online, **raw detection counts jump — even if
+nothing changed on the ground.** A trend line drawn from raw counts shows fire activity rising sharply
+after 2012; part of that is simply more, and better, sensors looking.
 
-Açık bir veri hattı ve etkileşimli bir uygulama geliştirdik: VIIRS tespitlerini **MODIS-eşdeğeri
-sayılara** çeviriyoruz. Böylece 2000'den bugüne kadarki kayıt tek, tutarlı bir aylık takvim olarak okunabiliyor.
+We built an open data pipeline and an interactive app that convert VIIRS detections into
+**MODIS-equivalent counts**, so the record from 2000 to today can be read as one consistent monthly calendar.
 
 ---
 
-## Uygulama ne gösteriyor
+## What the app shows
 
-| Görünüm | Amaç |
+| View | Purpose |
 |---|---|
-| **Harita + bölge çizimi** | Hazır bir bölge seç ya da istediğin çokgeni çiz; tek tek tespitleri gör |
-| **Aylık takvim (yıl × ay)** | Her ay için yangın tespit aktivitesi, ham ya da harmonize |
-| **Ham ve harmonize yıllık grafik** | Ham sayılar her uydu fırlatmasında basamak yapar (2012, 2018, 2023); harmonize seri yapmaz |
-| **Anomali kartı** | Bir ayın, diğer tüm yıllardaki aynı takvim ayına göre ne kadar sıra dışı olduğu (sıra, normalin kaç katı) |
-| **CSV dışa aktarma** | Seçili tespitleri ya da aylık tabloyu indir |
+| **Map + region drawing** | Pick a preset region or draw any polygon; detections are shown as a heat map |
+| **Monthly calendar (year × month)** | Fire detection activity for every month, raw or harmonized |
+| **Raw vs. harmonized annual chart** | Raw counts step up at every satellite launch (2012, 2018, 2023); the harmonized series does not |
+| **Anomaly card** | How unusual a month is compared with the same calendar month in all other years (rank, multiple of normal) |
+| **CSV export** | Download the selected detections or the monthly table |
 
-## Örnek: Hohes Venn (Yüksek Bataklıklar), Belçika/Almanya
+## Example: Hohes Venn (High Fens), Belgium/Germany
 
-| Olay | Veri ne gösteriyor |
+| Event | What the data shows |
 |---|---|
-| **Nisan 2011** (MODIS dönemi) | 25–26 Nisan'da **17 MODIS tespiti**, 3 uydu geçişi, hepsi bitki yangını olarak sınıflandırılmış. Harmonize seride diğer 25 Nisanın ortalaması ≈0,59 → **normalin ~29 katı, 26 yılın en yüksek Nisanı.** Ham seride aynı ay sadece ~6 kat görünüyor: VIIRS dönemindeki şişkin sayılar "normali" yükseltiyor. **Harmonizasyon olmadan tarihi bir olay olduğundan çok daha sıradan görünür.** |
-| **Ağustos 2026** (VIIRS dönemi) | Aynı olay için (14–17 Ağustos) **105 MODIS ve 1.794 VIIRS tespiti** (ham toplam 1.899). Harmonize tahmin: **169 MODIS-eşdeğeri tespit**, 26 yılın en yüksek Ağustosu. |
+| **April 2011** (MODIS era) | **17 MODIS detections** on 25–26 April, 3 satellite overpasses, all classified as vegetation fire. In the harmonized series the average of the other 25 Aprils is ≈0.59 → **~29× normal, the highest April in 26 years.** In the raw series the same month looks only ~6× normal: inflated VIIRS-era counts raise the "normal". **Without harmonization, a historic event looks far more ordinary than it was.** |
+| **August 2026** (VIIRS era) | For the same event (14–17 August), **105 MODIS and 1,794 VIIRS detections** (1,899 raw in total). Harmonized estimate: **169 MODIS-equivalent detections**, the highest August in 26 years. |
 
-2011 tespitlerinin tamamı Hohes Venn'in **Belçika** tarafında. Sadece Almanya verisi indirilseydi olay
-hiç görünmezdi; bu yüzden çalışma alanlarımızı ülke olarak değil, koordinat kutusu olarak tanımladık.
+All 2011 detections are on the **Belgian** side of the Hohes Venn. Had we downloaded only German data,
+the event would not appear at all — which is why our study areas are coordinate boxes, not countries.
 
-## Nasıl çalışıyor
+## How it works
 
 ```
-NASA FIRMS CSV'leri ──► ingest.py ──► hotspots.parquet ──► harmonize.py ──► hotspots_harm.parquet ──► uygulama (Streamlit)
- (MODIS + 3×VIIRS,       temizle, tekrar    tek şema           tespit başına        weight_harm          query.py ─► app.py
-  archive + NRT)         sil, archive/NRT                      weight_harm                                   │
-                         birleştir                                   │                                       ▼
-                                                               validate.py ──► metrikler + grafikler   takvim, harita, anomali
+NASA FIRMS CSVs ──► ingest.py ──► hotspots.parquet ──► harmonize.py ──► hotspots_harm.parquet ──► app (Streamlit)
+ (MODIS + 3×VIIRS,   clean, dedupe,    one schema         weight_harm         weight_harm          query.py ─► app.py
+  archive + NRT)     merge archive/NRT                    per detection                                  │
+                                                               │                                         ▼
+                                                         validate.py ──► metrics + figures      calendar, map, anomaly
 ```
 
-1. **Okuma (ingest)** — tüm MODIS C6.1 ve VIIRS C2 (S-NPP, NOAA-20, NOAA-21) tespitleri, standart
-   (archive) ve yakın gerçek zamanlı (NRT), tek bir şemaya çevrilir ([docs/CONTRACT.md](docs/CONTRACT.md)).
-   Birebir tekrarlar silinir; archive ile NRT çakıştığında bölge ve uydu bazında archive (daha kaliteli)
-   kalır. Farklı uydulardan ya da farklı geçiş zamanlarından gelen tespitler asla birleştirilmez.
-2. **Harmonizasyon** — her tespite bir `weight_harm` ağırlığı verilir; ağırlıkların toplamı MODIS-eşdeğeri
-   tespit sayısının tahminidir. Yöntem: Arjantin'de (2012–2021) enlem bandı ve yerel mevsime
-   göre kalibre edilen bir MODIS/VIIRS oranı `k`, o gün aktif VIIRS uydu sayısına bölünür. Az örnekli enlem
-   bantları birleştirilir (en az 500 MODIS tespiti). Eğitimde olmayan NOAA-21 için NOAA-20'nin katsayısı kullanılır.
-   Sadece Terra'nın uçtuğu 2000-11 → 2002-07 döneminde Terra ağırlığı veriden 2,753'tür (Aqua, Terra'dan ~1,75 kat
-   fazla tespit yakalıyor). Ayrıntılar: [`pipeline/harmonize.py`](pipeline/harmonize.py).
-3. **Doğrulama** — katsayılar eğitimde kullanılmayan yıllarda (2022–2024) ve farklı bir bölge ve
-   yarımkürede (Aachen/Eifel) test edilir. Sonuçlar aşağıda ve [`docs/validation/`](docs/validation/) içinde.
-4. **Keşif** — küçük bir sorgu katmanı ([`app/query.py`](app/query.py)) üzerine kurulu Streamlit
-   uygulaması ([`app/app.py`](app/app.py)).
+1. **Ingest** — all MODIS C6.1 and VIIRS C2 (S-NPP, NOAA-20, NOAA-21) detections, standard (archive) and
+   near-real-time (NRT), are converted to a single schema ([docs/CONTRACT.md](docs/CONTRACT.md)).
+   Exact duplicates are removed; where archive and NRT overlap, archive (higher quality) is kept, per region
+   and satellite. Detections from different satellites or different overpass times are never merged.
+2. **Harmonization** — every detection gets a weight `weight_harm`; the sum of weights is the estimated
+   number of MODIS-equivalent detections. Method: a MODIS/VIIRS ratio `k`, calibrated in Argentina (2012–2021)
+   by latitude band and local season, divided by the number of VIIRS satellites active that day. Sparse
+   latitude bands are merged (at least 500 MODIS detections). NOAA-21, absent from training, uses NOAA-20's
+   coefficient. In the Terra-only period (2000-11 → 2002-07) the Terra weight is 2.753, derived from the data
+   (Aqua catches ~1.75× more detections than Terra). Details: [`pipeline/harmonize.py`](pipeline/harmonize.py).
+3. **Validation** — coefficients are tested on years not used in training (2022–2024) and in a different
+   region and hemisphere (Aachen/Eifel). Results below and in [`docs/validation/`](docs/validation/).
+4. **Exploration** — a Streamlit app ([`app/app.py`](app/app.py)) built on a small query layer
+   ([`app/query.py`](app/query.py)).
 
-## Doğrulama sonuçları
+## Validation results
 
-Tahmin: harmonize VIIRS (`Σ weight_harm`), gerçek: MODIS tespit sayısı, 1° hücre × ay ölçeğinde.
-Katsayılar sadece Arjantin 2012–2021'den öğrenildi. Kaynak: [`docs/validation/metrics.json`](docs/validation/metrics.json).
+Prediction: harmonized VIIRS (`Σ weight_harm`); truth: MODIS detection count, at 1° cell × month scale.
+Coefficients were learned from Argentina 2012–2021 only. Source: [`docs/validation/metrics.json`](docs/validation/metrics.json).
 
-| Arjantin | Harmonize R² | Harmonize sapma | Harmonizasyonsuz (ham VIIRS) sapma | n (hücre-ay) |
+| Argentina | Harmonized R² | Harmonized bias | Unharmonized (raw VIIRS) bias | n (cell-months) |
 |---|---|---|---|---|
-| Eğitim 2012–2021 | 0,92 | −%0,9 | +%390 | 27.568 |
-| **Test 2022–2024** | **0,79** | **+%6,7** | **+%786** | 8.616 |
-| Test 2023–2024 (eğitimde olmayan NOAA-21 aktif) | 0,93 | −%2,5 | +%849 | 5.782 |
-| Test 2022 | 0,71 | +%18,4 | +%707 | 2.834 |
+| Training 2012–2021 | 0.92 | −0.9% | +390% | 27,568 |
+| **Test 2022–2024** | **0.79** | **+6.7%** | **+786%** | 8,616 |
+| Test 2023–2024 (NOAA-21 active, not in training) | 0.93 | −2.5% | +849% | 5,782 |
+| Test 2022 | 0.71 | +18.4% | +707% | 2,834 |
 
-- **Bölge aktarımı (Aachen/Eifel, 2012–2026, bölge eğitime hiç girmedi):** R² 0,79, sapma +%35 (n=54). Bu R²
-  büyük ölçüde tek olaydan (Ağustos 2026) geliyor; o ay hariç R² 0,37, sapma −%4,3. Yani olağan dönemde toplam
-  seviye tutuyor, ama büyük olayda fazla tahmin var.
-- **Destekleyici kanıt (bağımsız doğrulama değil):** NASA MCD64A1 yanmış alan ürününde, ±16 gün ve 3×3 piksel
-  (≈1,4 km) komşuluğunda Ağustos 2026 tespitlerinin %89'u (MODIS) ve %93'ü (VIIRS), Nisan 2011'in 9/17'si yanmış
-  piksele düşüyor. MCD64A1 de MODIS aktif yangın verisini kullandığı için bu bağımsız bir doğrulama değildir.
+- **Region transfer (Aachen/Eifel, 2012–2026, region never used in training):** R² 0.79, bias +35% (n=54).
+  This R² comes largely from a single event (August 2026); excluding that month, R² 0.37, bias −4.3%. In
+  ordinary periods the overall level holds, but the large event is overestimated.
+- **Supporting evidence (not independent validation):** in NASA's MCD64A1 burned-area product, within ±16 days
+  and a 3×3-pixel (≈1.4 km) neighbourhood, 89% (MODIS) and 93% (VIIRS) of the August 2026 detections and 9/17
+  of the April 2011 detections fall on burned pixels. MCD64A1 itself uses MODIS active-fire data, so this is
+  not an independent validation.
 
-## Veri
+## Data
 
-Tüm veriler **NASA FIRMS**'ten (Fire Information for Resource Management System) alınmıştır:
+All data comes from **NASA FIRMS** (Fire Information for Resource Management System,
+https://firms.modaps.eosdis.nasa.gov/):
 
-| Ürün | Uydu(lar) | Kullanılan dönem |
+| Product | Satellite(s) | Period used |
 |---|---|---|
-| MODIS Collection 6.1 aktif yangın (standart + NRT) | Terra, Aqua | 2000-11 → 2026-11 |
-| VIIRS 375 m Collection 2 aktif yangın (standart + NRT) | Suomi NPP | 2012-01 → 2026-11-02 (veri akışının sonu) |
-| VIIRS 375 m Collection 2 aktif yangın (standart + NRT) | NOAA-20 | 2018-04 → 2026-11 |
-| VIIRS 375 m Collection 2 aktif yangın (standart + NRT) | NOAA-21 | 2023-03 → 2026-11 |
+| MODIS Collection 6.1 active fire (standard + NRT) | Terra, Aqua | 2000-11 → 2026-11 |
+| VIIRS 375 m Collection 2 active fire (standard + NRT) | Suomi NPP | 2012-01 → 2026-11-02 (end of data stream) |
+| VIIRS 375 m Collection 2 active fire (standard + NRT) | NOAA-20 | 2018-04 → 2026-11 |
+| VIIRS 375 m Collection 2 active fire (standard + NRT) | NOAA-21 | 2023-03 → 2026-11 |
 
-Çalışma alanları: **Arjantin** (kalibrasyon; La Rioja dahil) ve **Aachen/Eifel**
-(koordinat kutusu 5,96–6,44° D, 50,44–50,83° K; Hohes Venn dahil).
-Karşılaştırma görüntüleri: NASA Worldview. Tam atıflar ve DOI'ler: [`docs/pitch/sources.md`](docs/pitch/sources.md).
+Study areas: **Argentina** (calibration; includes La Rioja) and **Aachen/Eifel**
+(coordinate box 5.96–6.44° E, 50.44–50.83° N; includes the Hohes Venn).
+Comparison imagery: NASA Worldview.
 
-## Bu ne — ve ne değil
+## What this is — and what it is not
 
-- Bir **tespit**, termal anomali içeren bir uydu pikselidir. **Doğrulanmış bir orman yangını olayı
-  değildir**; tek bir yangın çok sayıda tespit üretebilir, bazı tespitler de bitki yangını değildir.
-- Harmonize seri bir **tahmindir**. Dönüşüm katsayıları bir bölgede kalibre edilip başka bir bölgede
-  test edilmiştir; doğrulanmış küresel bir ürün değildir.
+- A **detection** is a satellite pixel containing a thermal anomaly. **It is not a confirmed wildfire
+  event**; one fire can produce many detections, and some detections are not vegetation fires.
+- The harmonized series is an **estimate**. The conversion coefficients were calibrated in one region and
+  tested in another; this is not a validated global product.
 
-### Bilinen sınırlamalar
+### Known limitations
 
-- **Yörünge kayması:** Terra ve Aqua özgün geçiş saatlerinden kayıyor; bu yüzden MODIS "referansı" da
-  son yıllarda daha az kararlı.
-- **Suomi NPP 2026-11-02'de sona erdi**; harmonizasyon aktif VIIRS uydu sayısını hesaba katıyor, ama
-  değişimden hemen sonraki aylar daha belirsiz.
-- **Sadece Terra dönemi (2000-11 → 2002-07):** tek bir MODIS uydusu vardı; Terra ağırlığı 2,753 ile
-  düzeltildi (Arjantin 2003–2011 verisinden).
-- **Taşınabilirlik:** Arjantin'de kalibre edilen katsayılar her ekosistem için geçerli olmayabilir. Aachen/Eifel'de
-  örneklem küçük ve büyük olayda (Ağustos 2026) harmonize tahmin MODIS'in ~1,6 katı (169 / 105).
-- **2022 sapması:** Arjantin'de 2022'de harmonize toplam MODIS'ten %18 fazla; ham veride de MODIS/VIIRS oranı
-  eğitim aralığının dışında. Uydu kesintileriyle açıklanmıyor; 2023–2024'te normale dönüyor.
-- **Hipotez (doğrulanmadı):** katsayı yangın büyüklüğüne bağlı olabilir. Büyük bir yangın cephesinde VIIRS
-  (375 m), MODIS'e (1 km) göre orantısız çok piksel sayıyor. Gelecek çalışma: katsayıyı yangın kümesinin
-  büyüklüğüne göre koşullamak ve Avrupa'dan ikinci bir eğitim bölgesi eklemek.
-- **NOAA-21:** eğitim döneminde yoktu; NOAA-20'nin katsayısı kullanıldı (test 2023–2024 sonuçları yukarıda).
-- **Saat dilimi:** aylar UTC'ye göre atanır.
+- **Orbital drift:** Terra and Aqua are drifting from their original overpass times, so the MODIS
+  "reference" itself is less stable in recent years.
+- **Suomi NPP ended on 2026-11-02**; the harmonization accounts for the number of active VIIRS satellites,
+  but the months right after the change are more uncertain.
+- **Terra-only period (2000-11 → 2002-07):** only one MODIS satellite was flying; the Terra weight of 2.753
+  corrects for this (derived from Argentina 2003–2011 data).
+- **Transferability:** coefficients calibrated in Argentina may not hold for every ecosystem. In Aachen/Eifel
+  the sample is small, and for the large event (August 2026) the harmonized estimate is ~1.6× MODIS (169 / 105).
+- **2022 bias:** in Argentina in 2022 the harmonized total is 18% above MODIS; in the raw data, too, the
+  MODIS/VIIRS ratio is outside the training range. Satellite outages do not explain it; it returns to normal in 2023–2024.
+- **Hypothesis (not validated):** the coefficient may depend on fire size. On a large fire front VIIRS
+  (375 m) counts disproportionately more pixels than MODIS (1 km). Future work: condition the coefficient on
+  fire-cluster size, and add a second training region in Europe.
+- **NOAA-21:** absent from the training period; NOAA-20's coefficient is used (see 2023–2024 test results above).
+- **Time zone:** months are assigned in UTC.
 
-## Yerelde çalıştırma
+## Running locally
 
-**Python 3.12** gerekir ([`.python-version`](.python-version)); kurulum için [uv](https://docs.astral.sh/uv/) kullanıyoruz.
+Requires **Python 3.12** ([`.python-version`](.python-version)); we use [uv](https://docs.astral.sh/uv/) for setup.
 
 ```bash
 git clone https://github.com/barismuutlu/Nasa_Hackathon.git
@@ -129,13 +131,14 @@ cd Nasa_Hackathon
 uv venv --python 3.12 .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 uv pip install -r requirements.txt
-python tests/smoke_test.py           # ortamı, veri sözleşmesini ve sorgu katmanını kontrol eder
+python tests/smoke_test.py           # checks the environment, the data contract and the query layer
 python -m streamlit run app/app.py
 ```
 
-Repoda küçük bir **sentetik** veri seti var (`data/mock/`), bu yüzden uygulama hemen çalışır; ekranda
-"SENTETİK TEST VERİSİ" uyarısı görünür. Gerçek veriyle çalışmak için FIRMS CSV'lerini
-`data/raw/<bölge>/` altına indir ve şunları çalıştır:
+The repo ships a small real-data extract for the preset regions (`data/deploy/`, the same data as the live
+demo), so the app runs right away. Without it, the app falls back to a **synthetic** dataset (`data/mock/`)
+and shows a "SYNTHETIC TEST DATA" warning. To rebuild from scratch, download the FIRMS CSVs into
+`data/raw/<region>/` and run:
 
 ```bash
 python pipeline/ingest.py      # → data/hotspots.parquet
@@ -143,30 +146,33 @@ python pipeline/harmonize.py   # → data/hotspots_harm.parquet, monthly_grid.pa
 python pipeline/validate.py    # → docs/validation/
 ```
 
-## Repo yapısı
+## Repository layout
 
 ```
-app/            Streamlit uygulaması (app.py) ve sorgu katmanı (query.py)
+app/            Streamlit app (app.py) and query layer (query.py)
 pipeline/       ingest → harmonize → validate
-contract.py     her pipeline adımının kullandığı ortak veri şeması + doğrulayıcı
-docs/           CONTRACT.md (veri sözleşmesi), validation/ (sonuçlar), pitch/ (sunum)
-tests/          uçtan uca duman testi
-data/mock/      geliştirme için sentetik veri (gerçek veri repoya eklenmez)
+contract.py     shared data schema + validator used by every pipeline step
+docs/           CONTRACT.md (data contract), validation/ (results), pitch/ (presentation)
+tests/          end-to-end smoke test
+data/deploy/    harmonized extract for the preset regions (used by the live demo)
+data/mock/      synthetic data for development (full data is not committed)
 ```
 
-## Ekip
+Code identifiers are in English; some internal docs and code comments are in Turkish (the team's working language).
 
-| Rol | Üye |
+## Team
+
+| Role | Member |
 |---|---|
-| Veri mühendisliği (okuma) | Süleyman |
-| Harmonizasyon | Bahtiyar |
-| Doğrulama | Oğuzhan |
-| Veri katmanı, entegrasyon, ekip lideri | Barış |
-| Uygulama / arayüz | Yusuf |
-| Sunum ve test | İbrahim |
+| Data engineering (ingest) | Süleyman |
+| Harmonization | Bahtiyar |
+| Validation | Oğuzhan |
+| Data layer, integration, team lead | Barış |
+| App / UI | Yusuf |
+| Presentation and testing | İbrahim |
 
-## Yapay zekâ kullanımı
+## Use of AI
 
-Kod ve belgelerin yazımında ve gözden geçirilmesinde yapay zekâ kodlama asistanları (Claude Code)
-kullandık. Tüm veri işleme tercihleri, bilimsel varsayımlar ve sonuçlar ekip tarafından gözden geçirildi;
-doğrulama sayıları asistandan değil, veri hattının NASA verisi üzerinde çalıştırılmasından gelir.
+We used AI coding assistants (Claude Code) to write and review code and documentation. All data-processing
+choices, scientific assumptions and results were reviewed by the team; the validation numbers come from
+running the pipeline on NASA data, not from the assistant.

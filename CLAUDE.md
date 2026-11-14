@@ -40,6 +40,10 @@ Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tesp
 
 Ortak dosyalara (`requirements.txt` vb.) paket eklemek gerekirse → Barış'a söyle, o ekler.
 
+**Ek yetki (P4 onayı, 14 Kas):** P2 Bahtiyar: freeze'e kadar `app/` ve `docs/pitch/`'e sadece `p2/*` branch'i ile
+katkı; merge dosya sahibinde (Yusuf / İbrahim). `app/app.py`'ye başlamadan önce Yusuf'a hangi bölüm olduğunu yazar.
+P3 Oğuzhan ekipten ayrıldı (14 Kas); `pipeline/validate.py` ve `docs/validation/` donduruldu, sorular → Bahtiyar.
+
 ## 3. Veri sözleşmesi (KİLİTLİ — değişiklik sadece P4 onayıyla; sürüm: `docs/CONTRACT.md` başlığı)
 Tam şema, tekrar kuralları, bölge adları, pipeline girdi/çıktıları ve `query.py` API'si:
 **`docs/CONTRACT.md`** (aşağıda içe aktarılıyor). Kod karşılığı: **`contract.py`**
@@ -123,20 +127,21 @@ Tüm script'ler **repo kökünden** çalıştırılır; yollar köke göreli.
 - Başkasını etkileyen push'lar §8'e göre yapılır.
 
 ## 7. Takvim (Cumartesi 14 Kasım → Pazar 15 Kasım 2026)
-| Saat | Kontrol noktası |
-|---|---|
-| 08:55 | P4: repo iskeleti push |
-| 10:30 | Roller + şema + repo hazır (5 dk toplantı) |
-| 11:00 | P4: mock parquet → P5 |
-| 11:30 | P1: örnek dosya (1 bölge, 1 yıl) |
-| 12:30 | P1: tam veri |
-| 13:00 | Gerçek veri herkeste, mock uygulama ayakta |
-| 16:30 | ✅ Ham takvim uçtan uca (P2 harmonize veri, P4 gerçek veri) |
-| 19:00 | ✅ Harmonize MVP (P3 doğrulama → P6) |
-| Pazar 09:15 | Jüri kriterleri gözden geçirme |
-| Pazar 12:00 | ❄️ FEATURE FREEZE — sadece bug fix |
-| Pazar 14:00 | Sunum hazır |
-| Pazar 14:30 | 📤 TESLİM (son saat 15:00) |
+| Saat | Kontrol noktası | Durum |
+|---|---|---|
+| 08:55 | P4: repo iskeleti push | ✅ |
+| 10:30 | Roller + şema + repo hazır (5 dk toplantı) | ✅ |
+| 11:00 | P4: mock parquet → P5 | ✅ |
+| 11:30 | P1: örnek dosya (1 bölge, 1 yıl) | ✅ |
+| 12:30 | P1: tam veri | ✅ |
+| 13:00 | Gerçek veri herkeste, mock uygulama ayakta | ✅ |
+| 16:30 | Ham takvim uçtan uca (P2 harmonize veri, P4 gerçek veri) | ✅ (erken) |
+| 19:00 | Harmonize MVP (P3 doğrulama → P6) | ✅ (erken) |
+| — | Streamlit Cloud (`data/deploy/`, gerçek + harmonize veri) | ✅ (Pazar sabahı yerine Cumartesi) |
+| Pazar 09:15 | Jüri kriterleri gözden geçirme | |
+| Pazar 12:00 | ❄️ FEATURE FREEZE — sadece bug fix | |
+| Pazar 14:00 | Sunum hazır | |
+| Pazar 14:30 | 📤 TESLİM (son saat 15:00) | |
 
 **Takıldın mı? 15 dk'dan fazla uğraşma, söyle.** Claude: kullanıcı aynı hatada 15 dk'yı geçtiyse
 bunu hatırlat ve "Barış'a yaz" öner.
