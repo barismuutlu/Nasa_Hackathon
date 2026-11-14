@@ -31,7 +31,7 @@ Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tesp
 ## 2. Ekip & dosya sahipliği
 | Rol | Kişi | Sahip olduğu dosyalar |
 |---|---|---|
-| P1 Veri Mühendisi | Süleyman | `pipeline/ingest.py`, `data/sample/` |
+| P1 Veri Mühendisi | Süleyman | `pipeline/ingest.py`, `pipeline/burned_area_check.py` (MCD64A1 destekleyici kontrol, ana şemaya dokunmaz), `data/sample/` |
 | P2 Harmonizasyon | Bahtiyar | `pipeline/harmonize.py` |
 | P3 ML & Doğrulama | Oğuzhan | `pipeline/validate.py`, `docs/validation/` |
 | P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `README.md`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
