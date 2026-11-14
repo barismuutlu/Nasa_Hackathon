@@ -1,0 +1,38 @@
+# systemd unit — Active Fire Detection Calendar (Streamlit) behind Apache.
+# Install: sudo cp deploy/vps/firecal.service /etc/systemd/system/ && sudo systemctl daemon-reload
+#          sudo systemctl enable --now firecal
+[Unit]
+Description=Active Fire Detection Calendar (Streamlit)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=firecal
+Group=firecal
+WorkingDirectory=/opt/firecal
+# Small real-data extract shipped in git (~3.4 MB, peak RSS ≈ 375 MB).
+# Do NOT point this at the full hotspots_harm.parquet on a 2 GB host (peak RSS ≈ 1.8 GB).
+Environment=HOTSPOTS_PATH=/opt/firecal/data/deploy/hotspots_deploy.parquet
+Environment=STREAMLIT_SERVER_HEADLESS=true
+Environment=STREAMLIT_SERVER_ADDRESS=127.0.0.1
+Environment=STREAMLIT_SERVER_PORT=8501
+Environment=STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+# Subpath variant (https://barismutlu.de/fire): uncomment and use apache-subpath.conf
+#Environment=STREAMLIT_SERVER_BASE_URL_PATH=fire
+ExecStart=/opt/firecal/.venv/bin/streamlit run app/app.py
+Restart=on-failure
+RestartSec=5
+# Keep the app from starving Apache / sshd on a 2 GB machine
+MemoryHigh=800M
+MemoryMax=1100M
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/firecal/.streamlit-home
+Environment=HOME=/opt/firecal/.streamlit-home
+
+[Install]
+WantedBy=multi-user.target
