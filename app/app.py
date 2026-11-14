@@ -1,5 +1,7 @@
 """P5 — Streamlit UI: MODIS ↔ VIIRS active fire detection calendar (English-only, scientific layout)."""
+import base64
 import json
+from pathlib import Path
 
 import folium
 import numpy as np
@@ -9,7 +11,8 @@ import streamlit as st
 from folium.plugins import Draw, HeatMap
 from streamlit_folium import st_folium
 
-from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes
+import query
+from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes, forecast
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 MAX_POINTS = 20000  # heat layer is one array → far lighter than thousands of separate markers
@@ -18,11 +21,15 @@ LOW_MEAN, MAX_RATIO = 1.0, 100  # baseline < 1 AND ratio ≥ 100 → show "typic
 LABEL_EN = {"çok yüksek": "very high", "yüksek": "high", "normal": "normal", "düşük": "low",
             "tespit yok": "no detections", "veri yok": "no data"}
 RAW, HARM = "Raw", "Harmonized"
-C_RAW, C_HARM = "#440154", "#21918c"  # viridis ends, used consistently for the two series
+C_RAW, C_HARM = "#cdc4b2", "#e8833a"  # raw = pale sand, harmonized = theme orange (both read on the dark page)
 # calendar colour scale: fire palette, pale yellow = fewest detections → dark red = most
 FIRE_SCALE = [[0.0, "#fff7c2"], [0.25, "#ffd84a"], [0.5, "#fe9b2d"], [0.75, "#d93806"], [1.0, "#7a0403"]]
 C_FRAME = "#ff9f1c"  # region frame on satellite imagery
+C_DRAWN = "#21918c"  # user-drawn area: teal stays visible on top of the orange heat layer
 C_NODATA = "#34322e"  # calendar background (no data)
+FC_RATIO = getattr(query, "FORECAST_RATIO", 1.5)  # outlook: ratio ≥ 1.5 → above normal, ≤ 1/1.5 → below
+BACKTEST_PNG = Path(__file__).resolve().parents[1] / "docs" / "forecast" / "backtest.png"  # P4, pipeline/forecast.py
+LOGO = Path(__file__).parent / "assets" / "firewatch_logo.png"  # transparent PNG, sits on the page background
 
 st.set_page_config(page_title="Active Fire Detection Calendar", page_icon=":material/local_fire_department:",
                    layout="wide")
@@ -31,14 +38,42 @@ st.markdown("""<style>
 .abstract {color: #c9c3b8; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .2rem 0;}
 .facts {color: #a39d92; font-size: .92rem; line-height: 1.5; max-width: 980px; margin: 0 0 .8rem 0;}
 .facts b {color: #ece7de; font-weight: 600;}
-.figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
+/* Site header: fixed bar with the logo; shrinks while the page scrolls (scroll-driven CSS, no JS).
+   Browsers without animation-timeline keep the full-size bar. */
+[data-testid="stMain"] {scroll-timeline: --page block;}
+/* room for the fixed bar on top; no empty band under the footer (it sits on the page end, also on short pages) */
+[data-testid="stMainBlockContainer"] {padding-top: 7.6rem; padding-bottom: 0; min-height: 100vh;
+                                      display: flex; flex-direction: column;}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] {flex: 1 1 auto; min-height: calc(100vh - 7.6rem);}
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] > div:has(> .st-key-sitefooter) {margin-top: auto;}
+[data-testid="stHeader"] {background: transparent; height: 2.2rem;}
+.sitebar {position: fixed; top: 0; left: 0; right: 0; z-index: 999980; height: 96px; padding: 0 5rem;
+          display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
+          background: #272522; border-bottom: 1px solid #3b3834; box-shadow: 0 2px 14px rgba(0,0,0,.35);
+          animation: sitebar-shrink linear both; animation-timeline: --page; animation-range: 0 180px;}
+.sitebar img {height: 72px; width: auto; display: block; pointer-events: none; user-select: none;
+              animation: sitelogo-shrink linear both; animation-timeline: --page; animation-range: 0 180px;}
+.sitebar .subtitle {color: #a39d92; font-size: 1.0rem; white-space: nowrap; margin-right: 1.5rem;
+                    animation: sitesub-fade linear both; animation-timeline: --page; animation-range: 0 120px;}
+@keyframes sitebar-shrink {to {height: 50px;}}
+@keyframes sitelogo-shrink {to {height: 36px;}}
+@keyframes sitesub-fade {to {opacity: 0;}}
+@media (max-width: 768px) {.sitebar {padding: 0 1rem;} .sitebar .subtitle {display: none;}}
+/* Site footer: separate band at the end of every page, links to the four info pages */
+.st-key-sitefooter {margin-top: auto; padding: 1.1rem 1.4rem 1.2rem; background: #272522;
+                    border-top: 1px solid #3b3834; border-radius: .6rem .6rem 0 0;}
+.st-key-sitefooter button {color: #ece7de; text-decoration: underline; text-underline-offset: 3px;
+                           text-decoration-color: #6f6a61;}
+.st-key-sitefooter button:hover {color: #e8833a;}
+.footnote {color: #a39d92; font-size: .88rem; margin-top: .2rem; text-align: center;}
+.ol-when {color: #a39d92; font-size: .95rem;}
+.ol-label {color: #e8833a; font-size: 2.1rem; font-weight: 700; line-height: 1.2; margin: .1rem 0 .4rem 0;}
+.ol-num {color: #c9c3b8; font-size: .98rem; line-height: 1.55;}
+.ol-num b {color: #ece7de;}
+.figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin: -.3rem 0 .9rem 0;}  /* bottom: clear of the card border */
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
 [data-testid="stMetricLabel"] p {color: #a39d92; font-size: .82rem;}
-.dossier {font-size: .9rem; font-variant-numeric: tabular-nums; line-height: 1.6; color: #ddd7cc;}
-.dossier td {padding: 1px 14px 1px 0; border: none;}
-.dossier tr {border: none;}
-.dossier .k {color: #948e83;}
 </style>""", unsafe_allow_html=True)
 
 
@@ -52,6 +87,13 @@ def load(geom_key, start, end, harmonized):
     geom = json.loads(geom_key)
     geom = tuple(geom) if isinstance(geom, list) else geom
     return get_hotspots(geom, start=start, end=end, harmonized=harmonized)
+
+
+@st.cache_data(show_spinner=False)
+def outlook(geom_key):
+    """Experimental 30-day detection outlook for the selected area (query.forecast, CONTRACT §7.5); None outside Argentina."""
+    geom = json.loads(geom_key)
+    return forecast(tuple(geom) if isinstance(geom, list) else geom)
 
 
 @st.cache_data(show_spinner=False)
@@ -78,13 +120,6 @@ INFO = info()
 MET = metrics_table()
 
 
-def headline_metric():
-    if MET is None:
-        return None
-    r = MET[(MET.method == "harm") & (MET.region == "argentina") & (MET.split == "test") & (MET.scale == "1deg")]
-    return (float(r.iloc[0].r2), float(r.iloc[0].bias_pct)) if len(r) else None
-
-
 def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=True):
     """Main event: region + series + selected cell in one click; the month is highlighted on the map."""
     st.session_state["event"] = dict(preset=preset_name, year=year, month=month, note=note, highlight=highlight)
@@ -97,22 +132,126 @@ def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=Tr
     st.session_state["annual_log"] = annual_log
 
 
+# ---------- Info pages (opened from the footer links; ?page=<key>) ----------
+def page_method():
+    st.markdown(
+        "**Harmonization (Method A).** MODIS is the common unit; historical MODIS data are not modified.\n\n"
+        "- MODIS detections before 2012-01-20 (VIIRS S-NPP start): weight 1 "
+        "(Terra-only period before Aqua, 2000-11 → 2002-07: weight 2.75, Terra+Aqua equivalent).\n"
+        "- MODIS detections after 2012-01-20: weight 0 — the series is carried by VIIRS; "
+        "MODIS is kept for validation only.\n"
+        "- Each VIIRS detection: weight = *k* / *n*, where *k* = ΣMODIS / ΣVIIRS "
+        "(per satellite × latitude band × local season; calibrated on Argentina 2012–2021, "
+        "*k* ≈ 0.20–0.34) and *n* = number of VIIRS satellites active that day.\n"
+        "- Harmonized count of any set of rows = Σ weight. Southern-hemisphere months are shifted by 6 "
+        "so that a seasonal *k* transfers between hemispheres.")
+
+
+def page_validation():
+    if MET is None:
+        st.info("Validation metrics not available (docs/validation/metrics.json).")
+    else:
+        rows = [("argentina", "test", "Argentina, held-out 2022–2024"),
+                ("argentina", "test_2023-2024", "Argentina 2023–2024 (NOAA-21 not in training)"),
+                ("argentina", "test_2022", "Argentina 2022"),
+                ("aachen_eifel", "transfer_2012-2026", "Aachen/Eifel transfer 2012–2026")]
+        out = []
+        for reg, split, name in rows:
+            r = {mth: MET[(MET.method == mth) & (MET.region == reg) & (MET.split == split)
+                          & (MET.scale == "1deg")] for mth in ("harm", "raw_viirs")}
+            if len(r["harm"]):
+                out.append({"Evaluation (1° cell-month)": name,
+                            "R² harmonized": round(float(r["harm"].iloc[0].r2), 2),
+                            "Bias harmonized": f"{float(r['harm'].iloc[0].bias_pct):+.1f}%",
+                            "R² raw VIIRS": round(float(r["raw_viirs"].iloc[0].r2), 1) if len(r["raw_viirs"]) else None,
+                            "Bias raw VIIRS": f"{float(r['raw_viirs'].iloc[0].bias_pct):+.0f}%" if len(r["raw_viirs"]) else "–",
+                            "n": int(r["harm"].iloc[0].n)})
+        st.dataframe(pd.DataFrame(out), hide_index=True, width="stretch")
+        st.markdown('<div class="figcap"><b>Table 1.</b> Prediction = harmonized VIIRS sum; reference = '
+                    'MODIS count in the same 1° cell and month. bias = Σpred / Σref − 1. '
+                    'R² is scale-dependent (higher at 1° than 0.25°). Source: docs/validation/metrics.json '
+                    '(P3).</div>', unsafe_allow_html=True)
+
+
+    fc = outlook(json.dumps(list(PRESETS["La Rioja (AR)"])))
+    if fc and BACKTEST_PNG.exists():
+        y0_, y1_ = fc["backtest_years"]
+        st.subheader("Experimental 30-day outlook: backtest")
+        st.markdown(
+            f"Backtest {y0_}–{y1_} on Argentina 1° cells, each year fitted on earlier years only: the outlook "
+            f"gets the direction (above or below normal) right in **{fc['direction_hit_rate']:.0%}** of cases "
+            f"(chance 50%), skill against the seasonal normal {fc['skill']:.2f}. NASA POWER weather and an "
+            "El Niño index were tested as extra inputs and did not improve it. "
+            "This is an outlook for detection counts, not a fire forecast.")
+        st.image(str(BACKTEST_PNG), width=900)
+
+
+def page_limitations():
+    st.markdown(
+        "1. **2022 over-estimation (+18%)** in Argentina, concentrated in the fire season; the raw "
+        "MODIS/VIIRS ratio of 2022 lies outside the training range. Annual uncertainty ≈ ±8–17%.\n"
+        "2. **Transfer to Europe is weaker.** Aachen/Eifel R² = 0.79 is driven by a single event "
+        "(Aug 2026); excluding it, R² = 0.37 with total bias −4.3%. For the large event the estimate "
+        "is +61% (169 vs 105 MODIS).\n"
+        "3. **Hypothesis, not validated:** *k* depends on fire size — a single large front yields "
+        "disproportionately many VIIRS pixels (implied *k* 0.176 < all training *k* ≥ 0.20). "
+        "Future work: condition *k* on cluster area / FRP; add a European training region.\n\n"
+        "Detections are thermal anomalies, not confirmed fire events. Harmonized values are estimates.")
+
+
+def page_sources():
+    st.markdown(
+        "- **NASA FIRMS** active fire data (archive + NRT), downloaded via DL_FIRE.\n"
+        "- **MODIS** Collection 6.1, Terra (2000-11 →) and Aqua (2002-07 →), 1 km pixels.\n"
+        "- **VIIRS** 375 m: S-NPP (2012-01 → 2026-11-02), NOAA-20 (2018-04 →), NOAA-21 (2023-03 →).\n"
+        "- Supporting check (not independent): MCD64A1 burned area for Hohes Venn — "
+        "Apr 2011: 9/17 MODIS detections inside burned pixels; Aug 2026: 93/105 MODIS, 1,674/1,794 VIIRS.\n"
+        f"- Loaded file: `{INFO['path']}` · {INFO['n_rows']:,} rows · "
+        f"{INFO['start']:%Y-%m-%d} → {INFO['end']:%Y-%m-%d} · satellites: {', '.join(INFO['satellites'])} · "
+        f"data contract v{INFO.get('contract', '?')}.")
+
+
+PAGES = {"method": ("Method", page_method), "validation": ("Validation", page_validation),
+         "limitations": ("Limitations", page_limitations), "sources": ("Data sources", page_sources)}
+# main-page widget keys: re-assigned while an info page is open so the selection survives the round trip
+KEEP = ["preset", "mode_lbl", "years", "exact", "scale", "sel_year", "sel_month", "annual_log"]
+
+
+def open_page(key=None):
+    if key:
+        st.query_params["page"] = key
+    else:
+        st.query_params.clear()
+
+
+def site_footer():
+    with st.container(key="sitefooter"):
+        cols = st.columns([1, 1, 1, 1, 4])
+        for c, (key, (label, _)) in zip(cols, PAGES.items()):
+            c.button(label, key=f"foot_{key}", type="tertiary", on_click=open_page, args=(key,))
+        st.markdown('<div class="footnote">Powered by NASA FIRMS active fire data (MODIS, VIIRS). '
+                    'Made by Gravity False 9. © 2026, all rights reserved.</div>', unsafe_allow_html=True)
+
+
 # ---------- Header ----------
 if INFO.get("is_mock"):
     st.warning("SYNTHETIC TEST DATA — not for interpretation")
-st.title("Active Fire Detection Calendar, 2000–2026")
-st.markdown('<div class="abstract">Satellite active-fire detections (thermal anomalies) from NASA FIRMS, '
-            'aggregated into a continuous monthly calendar. Each new VIIRS satellite inflates raw counts '
-            '(2012, 2018, 2023); the harmonized series converts VIIRS detections into '
-            '<b>MODIS-equivalent units</b> so that years remain comparable. A detection is a hot pixel, '
-            'not a confirmed fire event.</div>', unsafe_allow_html=True)
+# fixed site header (plain <img>: fixed size, no hover "enlarge" button)
+st.markdown(f'<div class="sitebar"><img alt="FireWatch" src="data:image/png;base64,'
+            f'{base64.b64encode(LOGO.read_bytes()).decode()}">'
+            '<div class="subtitle">Active Fire Detection Calendar, 2000–2026</div></div>', unsafe_allow_html=True)
 
-_hm = headline_metric()
-_test = (f" Independent test (Argentina 2022–2024, 1° cell-month): <b>R² = {_hm[0]:.2f}</b>, "
-         f"bias {_hm[1]:+.1f}%.") if _hm else ""
-st.markdown(f'<div class="facts">Data: <b>{INFO["start"].year}–{INFO["end"].year}</b>, monthly · '
-            f'<b>{len(INFO["satellites"])} satellites</b> (2 MODIS + 3 VIIRS) · '
-            f'<b>{INFO["n_rows"] / 1e6:.2f} million</b> detections.{_test}</div>', unsafe_allow_html=True)
+# ---------- Info page instead of the calendar ----------
+_page = st.query_params.get("page")
+for _k in KEEP:  # every run, before the widgets: otherwise a re-mounted widget shows its first option
+    if _k in st.session_state:
+        st.session_state[_k] = st.session_state[_k]
+if _page in PAGES:
+    st.button("← Back to the calendar", type="tertiary", on_click=open_page)
+    st.header(PAGES[_page][0])
+    PAGES[_page][1]()
+    site_footer()
+    st.stop()
 
 st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
@@ -136,6 +275,7 @@ if _ev and _ev["preset"] == st.session_state.get("preset", _ev["preset"]) and _e
 
 # ---------- Controls (on the page, no sidebar) ----------
 c_reg, c_ser, c_time, c_dates = st.columns([1.3, 1.3, 2.4, 1], vertical_alignment="bottom")
+st.session_state.setdefault("preset", "La Rioja (AR)")   # opening region
 preset = c_reg.selectbox("Region", list(PRESETS), key="preset")
 mode_lbl = c_ser.radio("Series", [RAW, HARM], horizontal=True, key="mode_lbl",
                        help="Raw: detection count, all satellites. Harmonized: MODIS-equivalent estimate.")
@@ -194,8 +334,6 @@ def _bounds(geojson_str):
 
 
 AREA = (_bounds(st.session_state["drawn"]) if st.session_state.get("drawn") else [[y0, x0], [y1, x1]])
-AREA_TXT = (f"{AREA[0][0]:.2f}–{AREA[1][0]:.2f}° lat, {AREA[0][1]:.2f}–{AREA[1][1]:.2f}° lon"
-            + (" (drawn)" if st.session_state.get("drawn") else ""))
 
 # map on top (full width), calendar below
 col_map, col_cal = st.container(), st.container()
@@ -226,7 +364,7 @@ with col_map.container(border=True):
         g = json.loads(st.session_state["drawn"])
         polys = [g["coordinates"]] if g.get("type") == "Polygon" else g.get("coordinates", [])
         for ring in (poly[0] for poly in polys if poly):
-            folium.Polygon([[lat, lon] for lon, lat in ring], color=C_HARM, weight=3,
+            folium.Polygon([[lat, lon] for lon, lat in ring], color=C_DRAWN, weight=3,
                            fill=True, fill_opacity=0.1).add_to(drawn_fg)
     m.fit_bounds(AREA)
     drawn_fg.add_to(m)
@@ -291,6 +429,18 @@ def calendar_and_anomaly(df, mode, d0, d1):
     other = monthly_matrix(df, mode="harm" if mode == "raw" else "raw", start=s, end=e).dropna(how="all")
     shown = mat.astype(float).copy()
     z = shown.values
+    # selected cell, resolved BEFORE the figure is built so the clicked cell is outlined in the same run:
+    # the chart's click state is already in session_state["cal"] when the fragment reruns
+    pts_sel = (st.session_state.get("cal") or {}).get("selection", {}).get("points", [])
+    if pts_sel:
+        sel = (int(pts_sel[0]["y"]), MONTHS.index(pts_sel[0]["x"]) + 1)
+        if sel != st.session_state.get("_last_sel"):
+            st.session_state["_last_sel"] = sel
+            st.session_state["sel_year"], st.session_state["sel_month"] = sel
+    years = [int(y) for y in mat.index]
+    if st.session_state.get("sel_year") not in years:
+        st.session_state["sel_year"] = 2026 if 2026 in years else years[-1]
+    st.session_state.setdefault("sel_month", 8)
     scale = st.radio("Colour scale", ["Log", "Linear", "Anomaly (z)"], horizontal=True, key="scale",
                      help="Log keeps small events (Hohes Venn Apr 2011 = 17) visible next to large ones (1,899). "
                           "Anomaly: z-score of each cell against the same month in other years.")
@@ -340,54 +490,105 @@ def calendar_and_anomaly(df, mode, d0, d1):
         hovertemplate="%{x} %{y}<br>" + unit + ": %{customdata[0]:,.1f}%{customdata[1]}<extra></extra>"))
     fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10), clickmode="event+select",
                       plot_bgcolor=C_NODATA,
-                      yaxis=dict(range=[int(shown.index.max()) + 0.5, int(shown.index.min()) - 0.5], dtick=2))
-    ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal")
+                      # axes are locked: a double click used to reset them to autorange (1998–2028, shrunken grid)
+                      dragmode=False, xaxis=dict(fixedrange=True),
+                      yaxis=dict(range=[int(shown.index.max()) + 0.5, int(shown.index.min()) - 0.5], dtick=2,
+                                 fixedrange=True))
+    # outline of the selected cell: dark line under a light one, readable on pale yellow and on dark red
+    _sy, _sm = st.session_state["sel_year"], st.session_state["sel_month"]
+    for _col, _w in (("#1d1c1a", 5), ("#ffffff", 2.5)):
+        fig.add_shape(type="rect", x0=_sm - 1.5, x1=_sm - 0.5, y0=_sy - 0.5, y1=_sy + 0.5,
+                      line=dict(color=_col, width=_w), fillcolor="rgba(0,0,0,0)", layer="above")
+    st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal",
+                         config={"doubleClick": False, "displayModeBar": False, "scrollZoom": False})
     figcap(2, f"Monthly {'raw detections' if mode == 'raw' else 'harmonized (MODIS-equivalent) estimate'}.",
-           f"{scale} colour scale. Grey = no data. • = partial month. Click a cell to inspect it.")
-    pts_sel = (ev or {}).get("selection", {}).get("points", []) if ev else []
-    if pts_sel:
-        sel = (int(pts_sel[0]["y"]), MONTHS.index(pts_sel[0]["x"]) + 1)
-        if sel != st.session_state.get("_last_sel"):
-            st.session_state["_last_sel"] = sel
-            st.session_state["sel_year"], st.session_state["sel_month"] = sel
+           f"{scale} colour scale. Grey = no data. • = partial month. Click a cell to inspect it; the outlined cell is the selected one.")
 
     # ---- selected cell record ----
     st.subheader("Selected cell")
     c1, c2, _ = st.columns([1, 1, 2])
-    years = [int(y) for y in mat.index]
-    if st.session_state.get("sel_year") not in years:
-        st.session_state["sel_year"] = 2026 if 2026 in years else years[-1]
-    st.session_state.setdefault("sel_month", 8)
     yr = c1.selectbox("Year", years, key="sel_year")
     mo = c2.selectbox("Month", list(range(1, 13)), format_func=lambda i: MONTHS[i - 1], key="sel_month")
     a = anomaly(mat, yr, mo)
     val, mean = a.get("value"), a.get("mean")
     ratio = val / mean if (fmt(val) != "–" and fmt(mean) != "–" and mean > 0) else None
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Detections" if mode == "raw" else "MODIS-eq.", fmt(val))
-    k2.metric("Rank", f"{a['rank']}/{a['n_years']}" if a.get("rank") is not None else "–",
-              help="1 = highest year for this calendar month")
-    if ratio is not None and mean < LOW_MEAN and ratio >= MAX_RATIO:
-        k3.metric("Typical month", f"≈{mean:.1f}", "baseline ≈0 per month", delta_color="off")
-    else:
-        k3.metric("× baseline mean", (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×")
-                  if ratio is not None else "–")
-    k4.metric("Anomaly", LABEL_EN.get(a["label"], a["label"]),
-              help="Detection-count anomaly against the same month in other years, not a fire-event class")
-    # record: both series side by side + context
+    # both series side by side (the point of the project), then how the month compares with a typical one
     try:
         v_other = float(other.loc[yr, mo])
     except (KeyError, TypeError, ValueError):
         v_other = float("nan")
     v_raw, v_harm = (val, v_other) if mode == "raw" else (v_other, val)
-    st.markdown(f"""<table class="dossier">
-<tr><td class="k">Region</td><td>{preset}</td><td class="k">Area</td><td>{AREA_TXT}</td></tr>
-<tr><td class="k">Month</td><td>{MONTHS[mo - 1]} {yr}</td><td class="k">Baseline</td>
-    <td>{fmt(mean)} ± {fmt(a['std'])} (n = {a['n_years']} years) · z = {fmt(a['z'])}</td></tr>
-<tr><td class="k">Raw</td><td>{fmt(v_raw, ',.0f')} detections</td><td class="k">Harmonized</td>
-    <td>{fmt(v_harm, ',.1f')} MODIS-eq.</td></tr>
-<tr><td class="k">Sources</td><td colspan="3">NASA FIRMS · MODIS C6.1 (Terra, Aqua) · VIIRS 375 m (S-NPP, NOAA-20, NOAA-21)</td></tr>
-</table>""", unsafe_allow_html=True)
+    series = "raw" if mode == "raw" else "harmonized"
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Raw detections", fmt(v_raw, ",.0f"), help="Detection count, all satellites")
+    k2.metric("Harmonized (MODIS-eq.)", fmt(v_harm, ",.1f"),
+              help="MODIS-equivalent estimate: what MODIS would be expected to count. An estimate, not a count.")
+    typical_help = (f"This month's {series} value divided by the mean of the same calendar month "
+                    "in the other years (the baseline).")
+    if ratio is not None and mean < LOW_MEAN and ratio >= MAX_RATIO:
+        k3.metric("Typical month", f"≈{mean:.1f}", "baseline ≈0 per month", delta_color="off", help=typical_help)
+    else:
+        k3.metric("× typical month", (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×")
+                  if ratio is not None else "–", help=typical_help)
+    k4.metric("Anomaly", LABEL_EN.get(a["label"], a["label"]),
+              help="Detection-count anomaly against the same month in other years, not a fire-event class")
+    m0 = pd.Timestamp(int(yr), int(mo), 1)
+    m1 = m0 + pd.offsets.MonthEnd(0)
+    partial = (f" · <b>Partial month:</b> data cover {max(m0, cov0):%d %b} – {min(m1, cov1):%d %b} only."
+               if fmt(val) != "–" and (m0 < cov0 or m1 > cov1) else "")
+    st.markdown(f'<div class="figcap">Typical {MONTHS[mo - 1]} ({series} series, same month in the other years): '
+                f'{fmt(mean)} ± {fmt(a["std"])} (n = {a["n_years"]} years) · z = {fmt(a["z"])}{partial}</div>',
+                unsafe_allow_html=True)
+
+
+# ---------- Outlook, next 30 days (experimental; P4 model, query.forecast) ----------
+def outlook_section(geom_key):
+    st.subheader("Outlook — next 30 days")
+    fc = outlook(geom_key)
+    if fc is None:
+        st.markdown('<div class="facts">Outlook available for Argentina only (model calibrated there).</div>',
+                    unsafe_allow_html=True)
+        return
+    pred, p10, p90, normal = fc["pred"], fc["p10"], fc["p90"], fc["normal"]
+    lo, hi = normal / FC_RATIO, normal * FC_RATIO          # "near normal" band (same threshold as query.forecast)
+    x_max = max(p90, hi) * 1.3
+    c_txt, c_fig = st.columns([1, 2.4], vertical_alignment="center")
+    c_txt.markdown(
+        f'<div class="ol-when">{fc["start"]:%d %b} – {fc["end"]:%d %b %Y}</div>'
+        f'<div class="ol-label">{fc["label"].capitalize()}</div>'
+        f'<div class="ol-num">≈<b>{pred:,.0f}</b> MODIS-eq. detections expected<br>'
+        f'normal for these 30 days: <b>{normal:,.0f}</b> ({fc["ratio"]:.1f}× normal)</div>', unsafe_allow_html=True)
+    fo = go.Figure()
+    # three zones behind the estimate: below / near / above normal
+    for x0, x1, name, fill in [(0, lo, "below normal", "#262422"), (lo, hi, "near normal", "#34322e"),
+                               (hi, x_max, "above normal", "#262422")]:
+        fo.add_shape(type="rect", x0=x0, x1=x1, y0=0, y1=1, fillcolor=fill, line_width=0, layer="below")
+        fo.add_annotation(x=(x0 + x1) / 2, y=1.0, yanchor="bottom", text=name, showarrow=False,
+                          font=dict(size=12, color="#a39d92"))
+    fo.add_shape(type="line", x0=normal, x1=normal, y0=0, y1=1, line=dict(color=C_RAW, width=2, dash="dot"))
+    fo.add_annotation(x=normal, y=0.97, yanchor="top", xanchor="left", xshift=5, text=f"normal {normal:,.0f}",
+                      showarrow=False, font=dict(size=12, color=C_RAW))
+    fo.add_shape(type="rect", x0=p10, x1=p90, y0=0.36, y1=0.64, fillcolor="rgba(232,131,58,0.35)",
+                 line=dict(color=C_HARM, width=1))
+    fo.add_trace(go.Scatter(x=[pred], y=[0.5], mode="markers+text", text=[f"expected ≈{pred:,.0f}"],
+                            textposition="bottom center", textfont=dict(color="#ece7de", size=13),
+                            marker=dict(color=C_HARM, size=16, line=dict(color="#1d1c1a", width=2)),
+                            hovertemplate=f"expected ≈{pred:,.0f}<br>80% range {p10:,.0f}–{p90:,.0f}<extra></extra>"))
+    for xv, anchor in ((p10, "right"), (p90, "left")):
+        fo.add_annotation(x=xv, y=0.5, xanchor=anchor, xshift=-6 if anchor == "right" else 6, text=f"{xv:,.0f}",
+                          showarrow=False, font=dict(size=12, color=C_HARM))
+    fo.update_layout(height=190, margin=dict(l=10, r=10, t=28, b=40), showlegend=False, dragmode=False,
+                     template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                     font=dict(family='"Source Sans Pro", "Source Sans 3", sans-serif', size=13, color="#a39d92"),
+                     xaxis=dict(range=[0, x_max], fixedrange=True, showgrid=False, zeroline=False, ticks="",
+                                title=dict(text="MODIS-eq. detections in the 30-day window", standoff=22)),
+                     yaxis=dict(range=[0, 1], visible=False, fixedrange=True))
+    c_fig.plotly_chart(fo, width="stretch", theme=None, config={"displayModeBar": False, "doubleClick": False})
+    figcap(4, "30-day detection outlook.",
+           f"Dot: expected value; orange bar: 80% range ({p10:,.0f}–{p90:,.0f}); dotted line: 10-year normal for the "
+           f"same 30 days. EXPERIMENTAL · a detection outlook, not a fire forecast · backtest "
+           f"{fc['backtest_years'][0]}–{fc['backtest_years'][1]}: direction right {fc['direction_hit_rate']:.0%} · "
+           f"data through {fc['data_through']:%d %b %Y} · {fc['n_cells']} 1° cells.")
 
 
 # ---------- Annual totals (fragment) ----------
@@ -415,10 +616,9 @@ def annual_chart(df, d0, d1):
     if "SNPP" in rng and rng["SNPP"][1] < INFO["end"] - pd.Timedelta(days=3):
         marks.append((_frac_year(rng["SNPP"][1]), "S-NPP ends"))
     for k, (xv, lbl) in enumerate(marks):
-        fy.add_vline(x=xv, line_dash="dash", line_color="#888")
+        fy.add_vline(x=xv, line_dash="dot", line_width=1.2, line_color="#6f6a61")
         fy.add_annotation(x=xv, y=1.0 if k % 2 == 0 else 1.09, yref="paper", text=lbl, showarrow=False,
-                          xanchor="right", yanchor="bottom", font=dict(size=11, color="#666"),
-                          bgcolor="rgba(255,255,255,0.8)")
+                          xanchor="right", yanchor="bottom", font=dict(size=11, color="#a39d92"))
     log_y = st.toggle("Log axis", key="annual_log",
                       help="On a log axis an equal ratio (e.g. 4×) has equal height at every level.")
     fy.update_layout(height=420, margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
@@ -426,80 +626,16 @@ def annual_chart(df, d0, d1):
                      yaxis=dict(title="Detections per year" + (" (log)" if log_y else ""),
                                 type="log" if log_y else "linear"),
                      legend=dict(orientation="h", y=-0.2),
-                     # light card on the dark page: the two viridis series colours need a white ground
-                     template="plotly_white", paper_bgcolor="#ffffff", plot_bgcolor="#ffffff",
-                     font=dict(family='"Source Sans Pro", "Source Sans 3", sans-serif', size=13,
-                               color="rgba(49,51,63,0.6)"),
-                     hoverlabel=dict(bgcolor="#ffffff", font=dict(color="#1e1b2e")))
+                     # same ground as the page and the calendar: transparent, warm grey text
+                     template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                     font=dict(family='"Source Sans Pro", "Source Sans 3", sans-serif', size=13, color="#a39d92"),
+                     hoverlabel=dict(bgcolor="#272522", bordercolor="#3b3834", font=dict(color="#ece7de")))
     fy.update_traces(marker=dict(size=8))
     fy.update_xaxes(showgrid=False, zeroline=False, ticks="", title_font=dict(size=15))
-    fy.update_yaxes(gridcolor="#e6eaf1", zeroline=False, ticks="", title_font=dict(size=15))
+    fy.update_yaxes(gridcolor="#34322e", zeroline=False, ticks="", title_font=dict(size=15))
     st.plotly_chart(fy, width="stretch", theme=None)
     figcap(3, "Annual totals.", "Dashed lines: start of each VIIRS satellite (from the data). Raw counts step up "
            "with every new sensor; the harmonized series should not. First and last years are partial.")
-
-
-# ---------- Methods, validation, limitations ----------
-def methods_section():
-    st.subheader("Methods & validation")
-    t1, t2, t3, t4 = st.tabs(["Method", "Validation", "Limitations", "Data sources"])
-    with t1:
-        st.markdown(
-            "**Harmonization (Method A).** MODIS is the common unit; historical MODIS data are not modified.\n\n"
-            "- MODIS detections before 2012-01-20 (VIIRS S-NPP start): weight 1 "
-            "(Terra-only period before Aqua, 2000-11 → 2002-07: weight 2.75, Terra+Aqua equivalent).\n"
-            "- MODIS detections after 2012-01-20: weight 0 — the series is carried by VIIRS; "
-            "MODIS is kept for validation only.\n"
-            "- Each VIIRS detection: weight = *k* / *n*, where *k* = ΣMODIS / ΣVIIRS "
-            "(per satellite × latitude band × local season; calibrated on Argentina 2012–2021, "
-            "*k* ≈ 0.20–0.34) and *n* = number of VIIRS satellites active that day.\n"
-            "- Harmonized count of any set of rows = Σ weight. Southern-hemisphere months are shifted by 6 "
-            "so that a seasonal *k* transfers between hemispheres.")
-    with t2:
-        if MET is None:
-            st.info("Validation metrics not available (docs/validation/metrics.json).")
-        else:
-            rows = [("argentina", "test", "Argentina, held-out 2022–2024"),
-                    ("argentina", "test_2023-2024", "Argentina 2023–2024 (NOAA-21 not in training)"),
-                    ("argentina", "test_2022", "Argentina 2022"),
-                    ("aachen_eifel", "transfer_2012-2026", "Aachen/Eifel transfer 2012–2026")]
-            out = []
-            for reg, split, name in rows:
-                r = {mth: MET[(MET.method == mth) & (MET.region == reg) & (MET.split == split)
-                              & (MET.scale == "1deg")] for mth in ("harm", "raw_viirs")}
-                if len(r["harm"]):
-                    out.append({"Evaluation (1° cell-month)": name,
-                                "R² harmonized": round(float(r["harm"].iloc[0].r2), 2),
-                                "Bias harmonized": f"{float(r['harm'].iloc[0].bias_pct):+.1f}%",
-                                "R² raw VIIRS": round(float(r["raw_viirs"].iloc[0].r2), 1) if len(r["raw_viirs"]) else None,
-                                "Bias raw VIIRS": f"{float(r['raw_viirs'].iloc[0].bias_pct):+.0f}%" if len(r["raw_viirs"]) else "–",
-                                "n": int(r["harm"].iloc[0].n)})
-            st.dataframe(pd.DataFrame(out), hide_index=True, width="stretch")
-            st.markdown('<div class="figcap"><b>Table 1.</b> Prediction = harmonized VIIRS sum; reference = '
-                        'MODIS count in the same 1° cell and month. bias = Σpred / Σref − 1. '
-                        'R² is scale-dependent (higher at 1° than 0.25°). Source: docs/validation/metrics.json '
-                        '(P3).</div>', unsafe_allow_html=True)
-    with t3:
-        st.markdown(
-            "1. **2022 over-estimation (+18%)** in Argentina, concentrated in the fire season; the raw "
-            "MODIS/VIIRS ratio of 2022 lies outside the training range. Annual uncertainty ≈ ±8–17%.\n"
-            "2. **Transfer to Europe is weaker.** Aachen/Eifel R² = 0.79 is driven by a single event "
-            "(Aug 2026); excluding it, R² = 0.37 with total bias −4.3%. For the large event the estimate "
-            "is +61% (169 vs 105 MODIS).\n"
-            "3. **Hypothesis, not validated:** *k* depends on fire size — a single large front yields "
-            "disproportionately many VIIRS pixels (implied *k* 0.176 < all training *k* ≥ 0.20). "
-            "Future work: condition *k* on cluster area / FRP; add a European training region.\n\n"
-            "Detections are thermal anomalies, not confirmed fire events. Harmonized values are estimates.")
-    with t4:
-        st.markdown(
-            "- **NASA FIRMS** active fire data (archive + NRT), downloaded via DL_FIRE.\n"
-            "- **MODIS** Collection 6.1, Terra (2000-11 →) and Aqua (2002-07 →), 1 km pixels.\n"
-            "- **VIIRS** 375 m: S-NPP (2012-01 → 2026-11-02), NOAA-20 (2018-04 →), NOAA-21 (2023-03 →).\n"
-            "- Supporting check (not independent): MCD64A1 burned area for Hohes Venn — "
-            "Apr 2011: 9/17 MODIS detections inside burned pixels; Aug 2026: 93/105 MODIS, 1,674/1,794 VIIRS.\n"
-            f"- Loaded file: `{INFO['path']}` · {INFO['n_rows']:,} rows · "
-            f"{INFO['start']:%Y-%m-%d} → {INFO['end']:%Y-%m-%d} · satellites: {', '.join(INFO['satellites'])} · "
-            f"data contract v{INFO.get('contract', '?')}.")
 
 
 with col_cal.container(border=True):
@@ -508,4 +644,5 @@ if not df.empty:
     with st.container(border=True):
         annual_chart(df, d0, d1)
 with st.container(border=True):
-    methods_section()
+    outlook_section(geom_key)
+site_footer()

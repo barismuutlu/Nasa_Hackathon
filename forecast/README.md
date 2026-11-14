@@ -3,6 +3,10 @@
 One-month **detection-level outlook** for Argentina, built on the harmonized monthly calendar.
 Owner: P2 Bahtiyar. Not part of the pipeline, not shown in the app.
 
+**Version used in the app:** `pipeline/forecast.py` (P4 Barış) — the same normal + persistence model on a
+30-day rolling window, with a correction for the regional total (summing back-transformed log predictions
+underestimates it: Argentina −24%, La Rioja −44%). This folder stays the monthly prototype.
+
 This is **not a fire prediction**. It uses no weather, drought or fuel data — only
 1. the seasonal normal of each 1° cell (same calendar month, 2003 onwards), and
 2. last month's deviation from that normal (the cell itself and the regional mean).
