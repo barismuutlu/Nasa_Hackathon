@@ -91,6 +91,8 @@ from contract import validate_hotspots
   ```
 - Claude: kod çalıştırmadan önce `.venv` aktif mi ve Python 3.12 mi kontrol et. Değilse kurulumu
   kullanıcıya hatırlat; sistem Python'uyla ya da `pip install <paket>` ile devam etme.
+- Ek ortam: `requirements-enrich.txt` (sadece `pipeline/burned_area_check.py`, P1; `pyhdf`). Ana uygulama,
+  `app/` ve `tests/` bu paketleri ASLA import etmez; Streamlit Cloud kurmaz.
 - Paket ekleme/sürüm değiştirme sadece P4 (`requirements.txt`). Değişince herkes
   `uv pip install -r requirements.txt` çalıştırır.
 

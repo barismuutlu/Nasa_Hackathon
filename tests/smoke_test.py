@@ -219,6 +219,19 @@ def _():
     return "; ".join(msgs)
 
 
+@check("query.monthly_matrix(start, end): filtre dışı aylar NaN, 0 değil")
+def _():
+    d = query.get_hotspots("Hohes Venn", start="2011-01-01", end="2026-11-13")
+    m = query.monthly_matrix(d, "raw", start="2011-01-01", end="2026-11-13")
+    first = int(m.index.min())
+    if first < 2011:
+        assert m.loc[first:2010].isna().all().all(), "2011 öncesi NaN olmalı"
+    assert m.loc[2011:].notna().any().any()
+    a = query.anomaly(m, 2011, 4)
+    assert a["n_years"] <= 2026 - 2011 + 1, f"n_years {a['n_years']} — filtre dışı yıllar sayılmış"
+    return f"2011-04 tabanı {a['n_years']} yıl"
+
+
 @check("query.to_csv_bytes")
 def _():
     m = query.monthly_matrix(query.get_hotspots("Hohes Venn"))

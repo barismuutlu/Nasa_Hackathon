@@ -146,13 +146,16 @@ def get_hotspots(geom, start=None, end=None, harmonized: bool = False) -> pd.Dat
     return out.copy()
 
 
-def monthly_matrix(df: pd.DataFrame, mode: str = "raw") -> pd.DataFrame:
+def monthly_matrix(df: pd.DataFrame, mode: str = "raw", start=None, end=None) -> pd.DataFrame:
     """Yıl × ay tablosu (index=yıl, columns=1..12).
 
     mode="raw":  tespit sayısı (tüm uydular — uydu eklenince sıçrar)
     mode="harm": Σ weight_harm (MODIS-eşdeğeri)
     Veri kapsamı dışındaki aylar (ör. 2000 Oca–Eki, gelecek aylar) NaN; kapsam içinde tespit yoksa 0.
     Harmonize veri yoksa (P2 öncesi) mode="harm" tamamen NaN döner.
+    start, end: get_hotspots'a verilen tarih filtresinin AYNISI. Verilirse aralığın dışındaki aylar da NaN
+    olur (0 değil) → yıllık toplam ve anomali tabanı filtrelenen yılları "0 tespit" saymaz.
+    Aralığın kısmen dahil olduğu ilk/son ay dahil sayılır.
     """
     if mode not in ("raw", "harm"):
         raise ValueError(f"mode 'raw' ya da 'harm' olmalı, gelen: {mode!r}")
@@ -168,11 +171,13 @@ def monthly_matrix(df: pd.DataFrame, mode: str = "raw") -> pd.DataFrame:
     mat = agg.unstack("month").reindex(index=years, columns=range(1, 13)).astype("float64")
     mat = mat.fillna(0.0)
 
-    # kapsam dışı aylar NaN
+    # kapsam dışı ve tarih filtresi dışı aylar NaN
+    lo = max(cov_start, pd.Timestamp(start).to_period("M")) if start is not None else cov_start
+    hi = min(cov_end, pd.Timestamp(end).to_period("M")) if end is not None else cov_end
     for y in years:
         for mth in range(1, 13):
             per = pd.Period(year=y, month=mth, freq="M")
-            if per < cov_start or per > cov_end:
+            if per < lo or per > hi:
                 mat.loc[y, mth] = np.nan
 
     if mode == "harm" and not full["weight_harm"].notna().any():
