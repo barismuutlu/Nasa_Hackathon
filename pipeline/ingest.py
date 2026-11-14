@@ -38,6 +38,8 @@ OUT_PATH = ROOT / "data" / "hotspots.parquet"
 COVERAGE_PATH = ROOT / "data" / "satellite_coverage.csv"
 SAMPLE_DIR = ROOT / "data" / "sample"
 SAMPLE_PATH = SAMPLE_DIR / "hotspots_sample.parquet"
+# data/raw/ altında FIRMS OLMAYAN klasörler (başka script'lerin ham verisi) → bölge sayılmaz, atlanır
+NON_FIRMS_DIRS = {"power": "pipeline/weather_power.py (NASA POWER hava verisi)"}
 
 sys.path.insert(0, str(ROOT))
 from contract import (  # noqa: E402
@@ -90,6 +92,8 @@ def find_raw_sources() -> list[tuple[str, str, callable]]:
         if len(rel.parts) < 2:
             raise ValueError(f"data/raw/{rel}: dosya bir bölge klasöründe olmalı (data/raw/<region>/…) — CONTRACT §5")
         region = rel.parts[0]
+        if region in NON_FIRMS_DIRS:
+            continue
         if not REGION_SLUG.match(region):
             raise ValueError(f"data/raw/{region}/: klasör adı region slug'ı değil (a-z0-9_) — CONTRACT §5")
         if p.suffix.lower() == ".csv":
@@ -350,6 +354,9 @@ def main() -> None:
         sys.stdout.reconfigure(encoding="utf-8")  # Windows konsolu (cp1252) Türkçe karakterde patlamasın
 
     print(f"Okuma: {RAW_DIR.relative_to(ROOT)}")
+    for d, owner in NON_FIRMS_DIRS.items():
+        if (RAW_DIR / d).exists():
+            print(f"  atlandı: data/raw/{d}/ — FIRMS değil, {owner}")
     parts, n_unreadable = [], 0
     for region, name, opener in find_raw_sources():
         part, n_bad = read_one(region, name, opener)
