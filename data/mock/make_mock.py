@@ -89,10 +89,10 @@ def generate_counts() -> pd.DataFrame:
 
     for name, (bbox, base, season) in REGIONS.items():
         lon_min, lat_min, lon_max, lat_max = bbox
-        year_factor = {y: RNG.lognormal(0, 0.35) for y in range(START.year, END.year + 1)}
+        year_factor = {y: RNG.lognormal(0, 0.10) for y in range(START.year, END.year + 1)}
         for m0 in months:
             m1 = min(m0 + pd.offsets.MonthEnd(0), END)
-            activity = base * season[m0.month - 1] * year_factor[m0.year] * RNG.gamma(4, 0.25)
+            activity = base * season[m0.month - 1] * year_factor[m0.year] * RNG.gamma(16, 1 / 16)
             k = RNG.integers(1, 5)
             centers = np.column_stack([RNG.uniform(lon_min, lon_max, k), RNG.uniform(lat_min, lat_max, k)])
             for sat, (_, _, _, sens, _) in SATS.items():
