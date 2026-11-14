@@ -473,8 +473,12 @@ def calendar_and_anomaly(df, mode, d0, d1):
         hovertemplate="%{x} %{y}<br>" + unit + ": %{customdata[0]:,.1f}%{customdata[1]}<extra></extra>"))
     fig.update_layout(height=560, margin=dict(l=10, r=10, t=10, b=10), clickmode="event+select",
                       plot_bgcolor=C_NODATA,
-                      yaxis=dict(range=[int(shown.index.max()) + 0.5, int(shown.index.min()) - 0.5], dtick=2))
-    ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal")
+                      # axes are locked: a double click used to reset them to autorange (1998–2028, shrunken grid)
+                      dragmode=False, xaxis=dict(fixedrange=True),
+                      yaxis=dict(range=[int(shown.index.max()) + 0.5, int(shown.index.min()) - 0.5], dtick=2,
+                                 fixedrange=True))
+    ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal",
+                         config={"doubleClick": False, "displayModeBar": False, "scrollZoom": False})
     figcap(2, f"Monthly {'raw detections' if mode == 'raw' else 'harmonized (MODIS-equivalent) estimate'}.",
            f"{scale} colour scale. Grey = no data. • = partial month. Click a cell to inspect it.")
     pts_sel = (ev or {}).get("selection", {}).get("points", []) if ev else []
