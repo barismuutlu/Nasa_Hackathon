@@ -78,13 +78,6 @@ INFO = info()
 MET = metrics_table()
 
 
-def headline_metric():
-    if MET is None:
-        return None
-    r = MET[(MET.method == "harm") & (MET.region == "argentina") & (MET.split == "test") & (MET.scale == "1deg")]
-    return (float(r.iloc[0].r2), float(r.iloc[0].bias_pct)) if len(r) else None
-
-
 def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=True):
     """Main event: region + series + selected cell in one click; the month is highlighted on the map."""
     st.session_state["event"] = dict(preset=preset_name, year=year, month=month, note=note, highlight=highlight)
@@ -101,18 +94,6 @@ def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=Tr
 if INFO.get("is_mock"):
     st.warning("SYNTHETIC TEST DATA — not for interpretation")
 st.title("Active Fire Detection Calendar, 2000–2026")
-st.markdown('<div class="abstract">Satellite active-fire detections (thermal anomalies) from NASA FIRMS, '
-            'aggregated into a continuous monthly calendar. Each new VIIRS satellite inflates raw counts '
-            '(2012, 2018, 2023); the harmonized series converts VIIRS detections into '
-            '<b>MODIS-equivalent units</b> so that years remain comparable. A detection is a hot pixel, '
-            'not a confirmed fire event.</div>', unsafe_allow_html=True)
-
-_hm = headline_metric()
-_test = (f" Independent test (Argentina 2022–2024, 1° cell-month): <b>R² = {_hm[0]:.2f}</b>, "
-         f"bias {_hm[1]:+.1f}%.") if _hm else ""
-st.markdown(f'<div class="facts">Data: <b>{INFO["start"].year}–{INFO["end"].year}</b>, monthly · '
-            f'<b>{len(INFO["satellites"])} satellites</b> (2 MODIS + 3 VIIRS) · '
-            f'<b>{INFO["n_rows"] / 1e6:.2f} million</b> detections.{_test}</div>', unsafe_allow_html=True)
 
 st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
@@ -136,6 +117,7 @@ if _ev and _ev["preset"] == st.session_state.get("preset", _ev["preset"]) and _e
 
 # ---------- Controls (on the page, no sidebar) ----------
 c_reg, c_ser, c_time, c_dates = st.columns([1.3, 1.3, 2.4, 1], vertical_alignment="bottom")
+st.session_state.setdefault("preset", "La Rioja (AR)")   # opening region
 preset = c_reg.selectbox("Region", list(PRESETS), key="preset")
 mode_lbl = c_ser.radio("Series", [RAW, HARM], horizontal=True, key="mode_lbl",
                        help="Raw: detection count, all satellites. Harmonized: MODIS-equivalent estimate.")
