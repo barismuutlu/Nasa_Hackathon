@@ -134,11 +134,37 @@ with col_cal:
             if not (first <= pd.Period(year=int(yy), month=int(mm), freq="M") <= last):
                 shown.loc[yy, mm] = np.nan
     z = shown.values
+    scale = st.radio("Renk ölçeği / Color scale",
+                     ["Log", "Doğrusal / Linear", "Anomali (z) / Anomaly (z)"],
+                     horizontal=True, key="scale",
+                     help="Log: küçük olaylar (ör. Hohes Venn 2011-04 = 17) büyüklerin (1899) yanında "
+                          "kaybolmasın. Anomali: her hücre aynı ayın diğer yıllarına göre z-skoru.")
+    unit = "Ham" if mode == "raw" else "MODIS-eşd."
+    if scale == "Log":
+        # renk = log10(1+değer); çubuk etiketleri gerçek sayılar
+        zc = np.log10(1 + np.clip(z, 0, None))
+        top = float(np.nanmax(zc)) if np.isfinite(zc).any() else 1.0
+        ticks = [v for v in [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000, 30000, 100000]
+                 if np.log10(1 + v) <= top + 1e-9]
+        hm = dict(zmin=0, zmax=max(top, 1e-6),
+                  colorbar=dict(title=unit, tickvals=[np.log10(1 + v) for v in ticks],
+                                ticktext=[f"{v:,}" for v in ticks]))
+    elif scale.startswith("Doğrusal"):
+        zc = z
+        hm = dict(zmin=0, zmax=float(np.nanmax(z)) if np.isfinite(z).any() else 1,
+                  colorbar=dict(title=unit))
+    else:
+        # aynı takvim ayının diğer yıllarına göre z (query.anomaly ile aynı taban)
+        zc = np.full_like(z, np.nan)
+        for i, yy in enumerate(shown.index):
+            for j, mm in enumerate(shown.columns):
+                if np.isfinite(z[i, j]):
+                    zz = anomaly(mat, yy, mm).get("z")
+                    zc[i, j] = zz if zz is not None and np.isfinite(zz) else np.nan
+        hm = dict(zmin=-3, zmax=3, colorbar=dict(title="z"))
     fig = go.Figure(go.Heatmap(
-        z=z, x=MONTHS, y=shown.index.astype(str), colorscale="Viridis",
-        zmin=0, zmax=float(np.nanmax(z)) if np.isfinite(z).any() else 1,
-        hoverinfo="skip",
-        colorbar=dict(title="Ham" if mode == "raw" else "MODIS-eşd."),
+        z=zc, x=MONTHS, y=shown.index.astype(str), colorscale="Viridis",
+        hoverinfo="skip", **hm,
     ))
     # Streamlit heatmap tıklamasını yakalamıyor → her hücreye görünmez tıklanabilir nokta
     gy, gx = np.meshgrid(shown.index.astype(str), MONTHS, indexing="ij")
