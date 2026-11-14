@@ -217,7 +217,7 @@ if harm_y.notna().any():
     fy.add_trace(go.Scatter(x=harm_y.index, y=harm_y.values, name="Harmonize / Harmonized",
                             mode="lines+markers", line=dict(color="#35b779", width=3)))
 def _frac_year(ts):
-    return ts.year + (ts.dayofyear - 1) / 365.25
+    return ts.year + (ts.day_of_year - 1) / 365.25
 
 
 # uydu geçiş tarihleri veriden (CONTRACT v1.2 §3) — sabit yazılmaz
