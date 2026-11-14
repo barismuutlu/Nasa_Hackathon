@@ -226,11 +226,19 @@ _marks = [(_frac_year(_ranges[s][0]), lbl) for s, lbl in
           [("SNPP", "S-NPP"), ("NOAA20", "NOAA-20"), ("NOAA21", "NOAA-21")] if s in _ranges]
 if "SNPP" in _ranges and _ranges["SNPP"][1] < INFO["end"] - pd.Timedelta(days=3):
     _marks.append((_frac_year(_ranges["SNPP"][1]), "S-NPP bitti / ended"))
-for xv, lbl in _marks:
-    fy.add_vline(x=xv, line_dash="dash", line_color="#888", annotation_text=lbl,
-                 annotation_position="top left")
-fy.update_layout(height=380, margin=dict(l=10, r=10, t=30, b=10), hovermode="x unified",
-                 xaxis_title="Yıl / Year", yaxis_title="Tespit / Detections",
+for k, (xv, lbl) in enumerate(_marks):
+    fy.add_vline(x=xv, line_dash="dash", line_color="#888")
+    # etiketler sırayla üst/alt kademe → yakın tarihler (NOAA-21, S-NPP bitti) çakışmasın
+    fy.add_annotation(x=xv, y=1.0 if k % 2 == 0 else 1.09, yref="paper", text=lbl,
+                      showarrow=False, xanchor="right", yanchor="bottom",
+                      font=dict(size=11, color="#666"), bgcolor="rgba(255,255,255,0.8)")
+log_y = st.toggle("Log eksen / Log axis", value=False, key="annual_log",
+                  help="Log eksende aynı oranlı artış (ör. 4×) her seviyede aynı yükseklikte görünür; "
+                       "2012 S-NPP sıçraması da belirginleşir.")
+fy.update_layout(height=420, margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
+                 xaxis_title="Yıl / Year",
+                 yaxis=dict(title="Tespit / Detections" + (" (log)" if log_y else ""),
+                            type="log" if log_y else "linear"),
                  legend=dict(orientation="h", y=-0.2))
 st.plotly_chart(fy, width="stretch")
 st.caption("Kısmi yıllar (ilk/son) eksik aylar nedeniyle düşük görünebilir. "
