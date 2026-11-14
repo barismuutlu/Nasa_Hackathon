@@ -1,5 +1,18 @@
 [theme]
 base = "light"
+# viridis paletiyle uyumlu sade tema (takvim ve ısı haritası da viridis)
+primaryColor = "#46327e"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f3fa"
+textColor = "#1e1b2e"
+borderColor = "#e4e0ee"
+showSidebarBorder = true
+font = "sans-serif"
+headingFontWeights = [700, 650, 600, 600, 600, 600]
+baseRadius = "0.6rem"
+buttonRadius = "0.6rem"
+metricValueFontWeight = 650
+paddingTop = "2.5rem"
 
 [client]
 # sağ üstteki geliştirici menüsünü (Deploy, ⋮) gizle — jüri/kullanıcı için sade görünüm

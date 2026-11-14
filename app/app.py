@@ -16,11 +16,17 @@ MONTHS = [tr if tr == en else f"{tr}/{en}" for tr, en in zip(MONTH_LABELS, EN_MO
 MAX_POINTS = 20000  # ısı katmanı tek dizi → 5000 ayrı işaretten çok daha hafif
 LOW_MEAN, MAX_RATIO = 1.0, 100  # taban < 1 VE kat ≥ 100 ise "kat" yerine "normalde ≈0" (2011-04 harm 29× kalır)
 
-st.set_page_config(page_title="Aktif Yangın Tespit Takvimi", page_icon="🔥", layout="wide")
+st.set_page_config(page_title="Aktif Yangın Tespit Takvimi", page_icon=":material/local_fire_department:",
+                   layout="wide")
 # Streamlit'in sağ üstteki animasyonlu "çalışıyor" figürlerini gizle (profesyonel görünüm);
 # yükleme bilgisi st.cache_data spinner'ı ("Veri yükleniyor / Loading…") ile veriliyor
 st.markdown("""<style>
 [data-testid="stStatusWidget"] {visibility: hidden; height: 0;}
+/* başlık altı açıklama ve kart başlıkları */
+.app-sub {color: #5b5670; font-size: 1.02rem; margin-top: -0.6rem; margin-bottom: 0.4rem;}
+[data-testid="stMetricLabel"] p {color: #5b5670;}
+[data-testid="stSidebar"] h3 {font-size: 0.95rem; text-transform: uppercase; letter-spacing: .04em;
+                              color: #46327e; margin-top: .6rem;}
 </style>""", unsafe_allow_html=True)
 
 
@@ -45,18 +51,85 @@ def fmt(x, spec=".1f"):
 
 INFO = info()
 
+
+@st.cache_data(show_spinner=False)
+def headline_metric():
+    """Ana doğrulama sonucu (P3, docs/validation/metrics.json): Arjantin bağımsız test 2022–2024, 1° hücre-ay."""
+    try:
+        m = pd.read_json("docs/validation/metrics.json")
+        r = m[(m.method == "harm") & (m.region == "argentina") & (m.split == "test") & (m.scale == "1deg")].iloc[0]
+        return float(r.r2), float(r.bias_pct)
+    except Exception:
+        return None
+
+
+def demo(preset_name, harm, year, month, annual_log=False):
+    """Sunum kısayolu: bölge + seri + seçili hücre tek tıkla."""
+    st.session_state["preset"] = preset_name
+    st.session_state["mode_lbl"] = "Harmonize / Harmonized" if harm else "Ham / Raw"
+    st.session_state["years"] = (INFO["start"].year, INFO["end"].year)
+    st.session_state["exact"] = False
+    st.session_state["scale"] = "Log"
+    st.session_state["sel_year"], st.session_state["sel_month"] = year, month
+    st.session_state["annual_log"] = annual_log
+
 # ---------- Üst uyarı + başlık ----------
 if INFO.get("is_mock"):
     st.warning("SENTETİK TEST VERİSİ / Synthetic test data")
-st.title("🔥 Aktif Yangın Tespit Takvimi / Active Fire Detection Calendar")
+st.title("Aktif Yangın Tespit Takvimi / Active Fire Detection Calendar")
+st.markdown('<div class="app-sub">NASA FIRMS MODIS + VIIRS uydu tespitlerinden 2000–2026 kesintisiz aylık takvim: '
+            'yeni uydular ham sayıyı sıçratır, harmonize seri bunu MODIS-eşdeğeri birime çevirir. '
+            '/ A continuous monthly calendar of satellite fire detections, harmonized to MODIS-equivalent units.'
+            '</div>', unsafe_allow_html=True)
+
+# ---------- Üst bilgi şeridi ----------
+_hm = headline_metric()
+s1, s2, s3, s4 = st.columns(4)
+with s1.container(border=True):
+    st.metric("Kapsam / Coverage", f"{INFO['start'].year}–{INFO['end'].year}",
+              f"{INFO['end'].year - INFO['start'].year + 1} yıl / years", delta_color="off")
+with s2.container(border=True):
+    st.metric("Uydular / Satellites", len(INFO["satellites"]), "2 MODIS + 3 VIIRS", delta_color="off")
+with s3.container(border=True):
+    st.metric("Tespit / Detections", f"{INFO['n_rows'] / 1e6:.2f} M".replace(".", ","),
+              "aktif yangın tespiti / active fire", delta_color="off")
+with s4.container(border=True):
+    if _hm:
+        st.metric("Bağımsız test / Independent test", f"R² = {_hm[0]:.2f}".replace(".", ","),
+                  f"sapma / bias {_hm[1]:+.1f}% · Arjantin 2022–24, 1°".replace(".", ","), delta_color="off",
+                  help="k Arjantin 2012–2021'de kalibre edildi; 2022–2024 eğitime girmedi (P3, metrics.json).")
+    else:
+        st.metric("Bağımsız test / Independent test", "–")
+
+# ---------- Demo kısayolları ----------
+st.caption("Hızlı başlangıç / Quick start")
+q1, q2, q3 = st.columns(3)
+q1.button("Hohes Venn · Nisan 2011 / April 2011", width="stretch",
+          on_click=demo, args=("Hohes Venn", True, 2011, 4),
+          help="Sadece MODIS dönemi: 26 yılın en yüksek Nisanı (Harmonize)")
+q2.button("Hohes Venn · Ağustos 2026 / August 2026", width="stretch",
+          on_click=demo, args=("Hohes Venn", True, 2026, 8),
+          help="Ham 1.899 vs Harmonize 169 tespit")
+q3.button("La Rioja · uydu sıçramaları / satellite jumps", width="stretch",
+          on_click=demo, args=("La Rioja (AR)", False, 2012, 4, True),
+          help="Ham seri 2012/2018/2023'te basamak atlar, harmonize düz kalır (yıllık grafik, log eksen)")
 
 # ---------- Kenar çubuğu ----------
 with st.sidebar:
     st.header("Ayarlar / Settings")
-    preset = st.selectbox("Bölge / Region", list(PRESETS))
+    st.subheader("Bölge / Region")
+    preset = st.selectbox("Bölge / Region", list(PRESETS), key="preset", label_visibility="collapsed")
+    st.subheader("Seri / Series")
+    mode_lbl = st.radio("Seri / Series", ["Ham / Raw", "Harmonize / Harmonized"], horizontal=True,
+                        key="mode_lbl", label_visibility="collapsed")
+    mode = "raw" if mode_lbl.startswith("Ham") else "harm"
+    st.caption("Ham: tüm uyduların tespit sayısı. Harmonize: MODIS-eşdeğeri tahmin. "
+               "/ Raw: detections from all satellites. Harmonized: MODIS-equivalent estimate.")
+    st.subheader("Zaman / Time")
     # ana kontrol: yıl aralığı kaydırıcısı (veri aylık; takvim seçici yıl gezintisinde zorluyordu)
     y_min, y_max = INFO["start"].year, INFO["end"].year
-    y0, y1 = st.slider("Yıl aralığı / Year range", y_min, y_max, (y_min, y_max), key="years")
+    st.session_state.setdefault("years", (y_min, y_max))  # varsayılan state'te → kısayollar uyarısız ayarlar
+    y0, y1 = st.slider("Yıl aralığı / Year range", y_min, y_max, key="years")
     d0 = max(pd.Timestamp(y0, 1, 1), INFO["start"]).date()
     d1 = min(pd.Timestamp(y1, 12, 31), INFO["end"]).date()
     # isteğe bağlı: gün bazında kesin tarih (iki ayrı, bağımsız alan)
@@ -72,10 +145,6 @@ with st.sidebar:
             else:
                 d0, d1 = e0, e1
     st.caption(f"Seçili / Selected: {d0:%Y-%m-%d} → {d1:%Y-%m-%d}")
-    mode_lbl = st.radio("Seri / Series", ["Ham / Raw", "Harmonize / Harmonized"], horizontal=True)
-    mode = "raw" if mode_lbl.startswith("Ham") else "harm"
-    st.caption("Ham: tüm uyduların tespit sayısı. Harmonize: MODIS-eşdeğeri tahmin. "
-               "/ Raw: detections from all satellites. Harmonized: MODIS-equivalent estimate.")
 
 # ---------- Harita ----------
 x0, y0, x1, y1 = PRESETS[preset]
@@ -113,7 +182,7 @@ def _bounds(geojson_str):
 
 
 col_map, col_cal = st.columns([1, 1])
-with col_map:
+with col_map.container(border=True):
     st.subheader("Harita / Map")
     m = folium.Map(tiles="OpenStreetMap")
     folium.Rectangle([[y0, x0], [y1, x1]], color="#440154", fill=False, weight=2).add_to(m)
@@ -154,7 +223,7 @@ with col_map:
             reset_drawing()
             st.rerun()
     if st.session_state.get("drawn"):
-        st.button("↩ Bölgeye dön / Back to region", on_click=reset_drawing,
+        st.button("Bölgeye dön / Back to region", icon=":material/undo:", on_click=reset_drawing,
                   help=f"Çizimi sil, '{preset}' kutusuna dön / Clear drawing, back to preset")
     st.caption(f"{len(df_map):,} tespit / detections · ısı haritası / heat map"
                + (f" ({MAX_POINTS:,} örnek / sampled)" if len(df_map) > MAX_POINTS else ""))
@@ -165,7 +234,8 @@ with col_map:
 
 with st.sidebar:
     # CSV sadece butona basılınca üretilir (her etkileşimde 1,5 sn / 20 MB üretmek yerine)
-    st.download_button("CSV indir / Download", data=lambda: to_csv_bytes(df),
+    st.subheader("Dışa aktar / Export")
+    st.download_button("CSV indir / Download", data=lambda: to_csv_bytes(df), icon=":material/download:",
                        file_name=f"hotspots_{preset}_{mode}.csv", mime="text/csv",
                        disabled=df.empty)
     with st.expander("Veri / Data", expanded=False):
@@ -240,7 +310,7 @@ def calendar_and_anomaly(df, mode, d0, d1):
             m1 = m0 + pd.offsets.MonthEnd(0)
             a0, a1 = max(m0, cov0), min(m1, cov1)
             if a0 > m0 or a1 < m1:
-                notes[i, j] = f"<br>⚠ kısmi ay / partial month: {a0:%d.%m}–{a1:%d.%m}"
+                notes[i, j] = f"<br>Kısmi ay / partial month: {a0:%d.%m}–{a1:%d.%m}"
     part = notes != ""
     if part.any():
         fig.add_trace(go.Scatter(
@@ -325,7 +395,7 @@ def annual_chart(df, d0, d1):
         fy.add_annotation(x=xv, y=1.0 if k % 2 == 0 else 1.09, yref="paper", text=lbl,
                           showarrow=False, xanchor="right", yanchor="bottom",
                           font=dict(size=11, color="#666"), bgcolor="rgba(255,255,255,0.8)")
-    log_y = st.toggle("Log eksen / Log axis", value=False, key="annual_log",
+    log_y = st.toggle("Log eksen / Log axis", key="annual_log",
                       help="Log eksende aynı oranlı artış (ör. 4×) her seviyede aynı yükseklikte görünür; "
                            "2012 S-NPP sıçraması da belirginleşir.")
     fy.update_layout(height=420, margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
@@ -338,7 +408,8 @@ def annual_chart(df, d0, d1):
                "/ First and last years are partial.")
 
 
-with col_cal:
+with col_cal.container(border=True):
     calendar_and_anomaly(df, mode, d0, d1)
 if not df.empty:
-    annual_chart(df, d0, d1)
+    with st.container(border=True):
+        annual_chart(df, d0, d1)
