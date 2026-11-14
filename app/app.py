@@ -85,8 +85,9 @@ def headline_metric():
     return (float(r.iloc[0].r2), float(r.iloc[0].bias_pct)) if len(r) else None
 
 
-def demo(preset_name, harm, year, month, annual_log=False):
-    """Quick-start: region + series + selected cell in one click."""
+def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=True):
+    """Main event: region + series + selected cell in one click; the month is highlighted on the map."""
+    st.session_state["event"] = dict(preset=preset_name, year=year, month=month, note=note, highlight=highlight)
     st.session_state["preset"] = preset_name
     st.session_state["mode_lbl"] = HARM if harm else RAW
     st.session_state["years"] = (INFO["start"].year, INFO["end"].year)
@@ -116,12 +117,22 @@ st.markdown(f'<div class="facts">Data: <b>{INFO["start"].year}–{INFO["end"].ye
 st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
 q1.button("Hohes Venn · April 2011", width="stretch", on_click=demo, args=("Hohes Venn", True, 2011, 4),
+          kwargs=dict(note="April 2011, MODIS-only era: 17 detections on 25–26 April, the highest April in "
+                           "26 years. Points on the map mark that month's detections."),
           help="MODIS-only era: highest April in 26 years (harmonized)")
 q2.button("Hohes Venn · August 2026", width="stretch", on_click=demo, args=("Hohes Venn", True, 2026, 8),
+          kwargs=dict(note="August 2026, VIIRS era: 1,899 raw detections, 169 MODIS-equivalent after "
+                           "harmonization, the highest August in 26 years. Points on the map mark that month."),
           help="Raw 1,899 vs harmonized 169 detections")
 q3.button("La Rioja · satellite jumps", width="stretch", on_click=demo,
           args=("La Rioja (AR)", False, 2012, 4, True),
+          kwargs=dict(note="La Rioja: raw annual totals step up when S-NPP (2012), NOAA-20 (2018) and NOAA-21 "
+                           "(2023) start; the harmonized series stays level. See the annual chart below.",
+                      highlight=False),
           help="Raw series steps up in 2012/2018/2023; harmonized stays level (annual chart, log axis)")
+_ev = st.session_state.get("event")
+if _ev and _ev["preset"] == st.session_state.get("preset", _ev["preset"]) and _ev["note"]:
+    st.markdown(f'<div class="facts">{_ev["note"]}</div>', unsafe_allow_html=True)
 
 # ---------- Sidebar ----------
 with st.sidebar:
@@ -224,6 +235,16 @@ with col_map.container(border=True):
     if len(pts):
         HeatMap(pts[["latitude", "longitude"]].to_numpy().tolist(), radius=8, blur=10, min_opacity=0.35,
                 gradient={0.2: "#7a0403", 0.45: "#d93806", 0.7: "#fe9b2d", 0.9: "#ffd84a", 1.0: "#fff7c2"}).add_to(m)
+    # main event: that month's detections as points on top of the all-time heat layer
+    ev = st.session_state.get("event")
+    n_ev = 0
+    if ev and ev["highlight"] and ev["preset"] == preset:
+        ev_pts = df_map[(df_map["year"] == ev["year"]) & (df_map["month"] == ev["month"])]
+        n_ev = len(ev_pts)
+        for la, lo in (ev_pts.sample(1500, random_state=0) if n_ev > 1500 else ev_pts)[
+                ["latitude", "longitude"]].to_numpy():
+            folium.CircleMarker([la, lo], radius=4, color="#ffffff", weight=1.2, fill=True,
+                                fill_color="#d93806", fill_opacity=0.95).add_to(m)
     # only drawing events are returned → pan/zoom does not rerun the page
     out = st_folium(m, height=480, use_container_width=True, returned_objects=["all_drawings"],
                     key=f"map_{preset}_{st.session_state['map_ver']}")
@@ -245,6 +266,7 @@ with col_map.container(border=True):
            f"{len(df_map):,} {'harmonized (weight > 0)' if mode == 'harm' else 'raw'} detections, "
            f"{d0:%Y-%m-%d} → {d1:%Y-%m-%d}{sampled}. Frame: preset region; badge: detections shown. "
            "Basemap: Esri World Imagery. "
+           + (f"Points: {n_ev:,} detections in {MONTHS[ev['month'] - 1]} {ev['year']}. " if n_ev else "") +
            "Draw a rectangle or polygon to analyse a custom area.")
     if preset == "Aachen/Eifel":
         st.caption("Note: the NW corner of the box (Aachen city, north of ≈50.73°N / west of 6.10°E) is outside "
