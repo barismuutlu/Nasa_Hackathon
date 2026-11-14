@@ -35,10 +35,23 @@ st.markdown("""<style>
 .abstract {color: #c9c3b8; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .2rem 0;}
 .facts {color: #a39d92; font-size: .92rem; line-height: 1.5; max-width: 980px; margin: 0 0 .8rem 0;}
 .facts b {color: #ece7de; font-weight: 600;}
-[data-testid="stMainBlockContainer"] {padding-top: 1.1rem;}  /* no empty band above the logo */
+/* Site header: fixed bar with the logo; shrinks while the page scrolls (scroll-driven CSS, no JS).
+   Browsers without animation-timeline keep the full-size bar. */
+[data-testid="stMain"] {scroll-timeline: --page block;}
+[data-testid="stMainBlockContainer"] {padding-top: 7.6rem;}  /* room for the fixed bar */
 [data-testid="stHeader"] {background: transparent; height: 2.2rem;}
-.brand img {height: 92px; width: auto; display: block; pointer-events: none; user-select: none;}
-.subtitle {color: #a39d92; font-size: 1.0rem; margin: .1rem 0 .6rem 0;}
+.sitebar {position: fixed; top: 0; left: 0; right: 0; z-index: 999980; height: 96px; padding: 0 5rem;
+          display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
+          background: #272522; border-bottom: 1px solid #3b3834; box-shadow: 0 2px 14px rgba(0,0,0,.35);
+          animation: sitebar-shrink linear both; animation-timeline: --page; animation-range: 0 180px;}
+.sitebar img {height: 72px; width: auto; display: block; pointer-events: none; user-select: none;
+              animation: sitelogo-shrink linear both; animation-timeline: --page; animation-range: 0 180px;}
+.sitebar .subtitle {color: #a39d92; font-size: 1.0rem; white-space: nowrap; margin-right: 1.5rem;
+                    animation: sitesub-fade linear both; animation-timeline: --page; animation-range: 0 120px;}
+@keyframes sitebar-shrink {to {height: 50px;}}
+@keyframes sitelogo-shrink {to {height: 36px;}}
+@keyframes sitesub-fade {to {opacity: 0;}}
+@media (max-width: 768px) {.sitebar {padding: 0 1rem;} .sitebar .subtitle {display: none;}}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
@@ -101,10 +114,10 @@ def demo(preset_name, harm, year, month, annual_log=False, note="", highlight=Tr
 # ---------- Header ----------
 if INFO.get("is_mock"):
     st.warning("SYNTHETIC TEST DATA — not for interpretation")
-# plain <img> instead of st.image: fixed size, no hover "enlarge" button
-st.markdown(f'<div class="brand"><img alt="FireWatch" src="data:image/png;base64,'
-            f'{base64.b64encode(LOGO.read_bytes()).decode()}"></div>'
-            '<div class="subtitle">Active Fire Detection Calendar, 2000–2026</div>', unsafe_allow_html=True)
+# fixed site header (plain <img>: fixed size, no hover "enlarge" button)
+st.markdown(f'<div class="sitebar"><img alt="FireWatch" src="data:image/png;base64,'
+            f'{base64.b64encode(LOGO.read_bytes()).decode()}">'
+            '<div class="subtitle">Active Fire Detection Calendar, 2000–2026</div></div>', unsafe_allow_html=True)
 
 st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
