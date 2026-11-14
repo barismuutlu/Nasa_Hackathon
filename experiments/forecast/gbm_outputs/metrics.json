@@ -1,0 +1,82 @@
+{
+  "region": "argentina",
+  "cell_deg": 1.0,
+  "horizon_months": 2,
+  "trained_through": "2026-10",
+  "target": "2026-12",
+  "train_targets": "2005-2021",
+  "model": "HistGradientBoostingRegressor(loss='poisson', max_iter=300, learning_rate=0.05)",
+  "inputs": [
+    "NASA FIRMS (harmonized monthly_grid)"
+  ],
+  "features": [
+    "cell_lat",
+    "cell_lon",
+    "month",
+    "lag2",
+    "lag3",
+    "lag4",
+    "lag12",
+    "lag24",
+    "ma12",
+    "clim"
+  ],
+  "normal": "same calendar month, last 10 full years",
+  "metrics": [
+    {
+      "scope": "argentina",
+      "method": "model",
+      "test": "2022-2025",
+      "monthly_total_r2_log": 0.43149846396725344,
+      "monthly_total_mae_pct": 44.901368723399266,
+      "bias_pct": 5.497763100090758,
+      "n_months": 48,
+      "cell_r2_log": 0.6992682157021531,
+      "cell_mae_log": 0.525539743191639,
+      "n_cell_months": 16416
+    },
+    {
+      "scope": "argentina",
+      "method": "climatology",
+      "test": "2022-2025",
+      "monthly_total_r2_log": 0.394108215740535,
+      "monthly_total_mae_pct": 60.41965189474657,
+      "bias_pct": 23.90760802629657,
+      "n_months": 48,
+      "cell_r2_log": 0.5890980454021242,
+      "cell_mae_log": 0.610592494186539,
+      "n_cell_months": 16416
+    },
+    {
+      "scope": "la_rioja",
+      "method": "model",
+      "test": "2022-2025",
+      "monthly_total_r2_log": 0.6728145337471507,
+      "monthly_total_mae_pct": 56.65097731257093,
+      "bias_pct": -9.690055503181316,
+      "n_months": 48
+    },
+    {
+      "scope": "la_rioja",
+      "method": "climatology",
+      "test": "2022-2025",
+      "monthly_total_r2_log": 0.6264174849773823,
+      "monthly_total_mae_pct": 61.93744900343692,
+      "bias_pct": 8.107052456017016,
+      "n_months": 48
+    }
+  ],
+  "weather_test": {
+    "error_pct_firms_only": 44.901368723399266,
+    "error_pct_with_weather": 47.17764595494362,
+    "accept_if_below_pct": 34,
+    "accepted": false,
+    "features": [
+      "prec_a2",
+      "prec_a3",
+      "prec3_a",
+      "tmax_a2",
+      "rh_a2"
+    ]
+  }
+}
