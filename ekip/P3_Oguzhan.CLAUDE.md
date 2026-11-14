@@ -1,6 +1,6 @@
 # P3 — ML & Doğrulama: Oğuzhan
 
-Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md` v1.1**'de. Bu dosya sadece senin rolün.
+Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md`** (güncel sürüm)'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
 - `pipeline/validate.py`
@@ -21,7 +21,7 @@ Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md` v1.1**'
    tahmin = VIIRS satırlarının `Σ weight_harm`, gerçek = `n_modis`.
    - En az bir tarafı > 0 olan hücre-aylar. Ayrıca 1°'ye toplayarak da hesapla (gürültü az).
 3. **Metrikler** — R², bias = ortalama(tahmin − gerçek), bias % = Σ tahmin / Σ gerçek − 1.
-   Arjantin (eğitim bölgesi) ve Almanya+Belçika (transfer) **ayrı ayrı** raporla.
+   Arjantin (eğitim bölgesi) ve `aachen_eifel` (transfer) **ayrı ayrı** raporla.
 4. **Venn kontrolü** — Hohes Venn kutusu (lon 5.95–6.25, lat 50.45–50.60):
    Nisan 2011 (sadece MODIS dönemi) ve Ağustos 2026 (VIIRS) ham + harmonize sayılarda görünüyor mu?
    O ayın anomali z-skoru ne? Sonuç: evet/hayır + sayılar.

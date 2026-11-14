@@ -1,10 +1,10 @@
-# Veri & Arayüz Sözleşmesi v1.1
+# Veri & Arayüz Sözleşmesi v1.2
 
 Sahibi: **P4 Barış**. Kod karşılığı: [`contract.py`](../contract.py) (sabitler + `validate_hotspots()`).
 Değişiklik → önce P4. Her değişiklik en alttaki **Değişiklik günlüğü**ne yazılır.
 
 Kaynaklar: FIRMS öznitelik tablosu (earthdata.nasa.gov → FIRMS → Active Fire Data Attributes).
-⚠️ Gerçek CSV başlıkları henüz görülmedi → P1 ilk dosyada doğrular, fark varsa P4'e bildirir.
+✅ Gerçek CSV başlıkları P1 tarafından doğrulandı (v1.2, §3).
 
 ---
 
@@ -54,12 +54,23 @@ Bir satır **doğrulanmış bir orman yangını olayı DEĞİLDİR** (bkz. §8 T
 |---|---|---|---|
 | `Terra`, `T` | Terra | MODIS | 2000-11 |
 | `Aqua`, `A` | Aqua | MODIS | 2002-07 |
-| `N` | SNPP | VIIRS | 2012-01 — **2026-11-02'de veri akışı durdu** (FIRMS duyurusu) |
+| `SNPP`, `N` | SNPP | VIIRS | 2012-01 — **2026-11-02'de veri akışı durdu** (FIRMS duyurusu, veride doğrulandı) |
 | `N20`, `1` | NOAA20 | VIIRS | 2018-04 |
-| `N21`, `2` | NOAA21 | VIIRS | 2024-01 |
+| `N21`, `2` | NOAA21 | VIIRS | **2023-03-01** (veride doğrulandı) |
 
 Gerçek ilk/son tarihleri P1 veriden çıkarır → `data/satellite_coverage.csv` (§7.1).
-Enstrüman tespiti dosya adından değil sütunlardan: `brightness` → MODIS, `bright_ti4` → VIIRS.
+Uygulama tarihleri sabit yazmaz, `query.data_info()["satellite_ranges"]`'ten alır.
+
+**Enstrüman = `SATELLITE_INSTRUMENT[satellite]`** (uydu kodundan). Sütun adından çıkarılmaz, çünkü
+iki indirme biçiminde VIIRS sütun adları farklı (P1 gerçek başlıklarla doğruladı):
+
+| Biçim | VIIRS parlaklık sütunları | MODIS | `satellite` (VIIRS) | `version` |
+|---|---|---|---|---|
+| DL_FIRE indirme aracı (`fire_archive_*`, `fire_nrt_*`) | `brightness`, `bright_t31` | `brightness`, `bright_t31` | `SNPP`, `N20`, `N21` | `2`, `2.0NRT` (MODIS `6.2`, `6.1NRT`) |
+| Ülke-yıl dosyası (`viirs-snpp_2020_Belgium.csv`) | `bright_ti4`, `bright_ti5` | `brightness`, `bright_t31` | `N`, `N20` | — |
+
+İkisi de `brightness` / `brightness_2`'ye eşlenir. `confidence` biçimi (sayı ↔ l/n/h) enstrümanla
+çapraz kontrol edilir. **Ülke-yıl dosyaları kullanılmaz** (2026 ve NOAA-21 yok, §5).
 
 ## 4. Tekrarlar ve archive/NRT çakışması
 **4a. Birebir tekrar** (aynı dosya ya da aynı kaynaktan iki kez indirme):
@@ -69,21 +80,24 @@ anahtar `(satellite, datetime_utc, round(latitude,4), round(longitude,4))` → i
 
 **4b. archive ↔ NRT**: NRT ve archive aynı tespiti **biraz farklı konumla** verir
 (NRT hızlı işlenir), bu yüzden nokta-nokta eşleştirme güvenilmez → çift sayım riski.
-Kural: her `satellite` için `cutoff = archive içindeki en son acq_date`;
-o uydunun `acq_date ≤ cutoff` olan **tüm NRT satırları atılır**, sonrası kalır.
-P1 her uydu için cutoff'u ve atılan NRT satır sayısını özete yazar.
+Kural: her **(`region`, `satellite`)** için `cutoff = o bölgenin archive'indeki en son acq_date`;
+o bölge-uydunun `acq_date ≤ cutoff` olan **tüm NRT satırları atılır**, sonrası kalır.
+Bölge bazında, çünkü bölgelerin archive'i farklı tarihte bitebilir; ortak cutoff bir bölgenin
+NRT verisini haksız yere silerdi (P1 bulgusu, v1.2). Bölgeler çakışmadığı için çift sayım olmaz.
+P1 her bölge-uydu için cutoff'u ve atılan NRT satır sayısını `satellite_coverage.csv`'ye yazar.
 
 ## 5. Bölge (region) adları
-- Kaynak: **FIRMS ülke dosyaları**. Ülkeler çakışmaz → aynı tespit iki bölgede olmaz.
-- Slug: ülke adı, küçük harf, ascii, `^[a-z0-9_]+$`. Klasör adı = değer:
-  `data/raw/germany/*.csv` → `region="germany"`.
-- Gerekli ülkeler (`contract.REGIONS`):
-  - `germany` — Aachen/Eifel'in Alman tarafı
-  - `belgium` — **Hohes Venn'in büyük kısmı Belçika'da.** Almanya dosyası tek başına Venn
-    tespitlerini (Nisan 2011) içermez → Belçika dosyası şart.
-  - `argentina` — La Rioja + P2 eğitimi
-- `region` uygulamada filtre değildir: uygulama **koordinatla** filtreler (`query.PRESETS`),
-  bu yüzden "Aachen/Eifel" kutusu Almanya + Belçika tespitlerini birlikte gösterir.
+- Kaynak: **FIRMS indirme aracı (DL_FIRE)**, 4 kaynak (MODIS C6.1, VIIRS S-NPP, NOAA-20, NOAA-21),
+  archive + NRT, 2000-11 → bugün. Takımın Drive arşivi bu biçimde.
+- **FIRMS ülke-YIL dosyaları kullanılmaz:** son yıl 2025 (2026 yok) ve NOAA-21 yok → Hohes Venn
+  Ağustos 2026 ve 2023 NOAA-21 sıçraması kaybolur.
+- Slug: `^[a-z0-9_]+$`. Klasör adı = değer: `data/raw/aachen_eifel/*.csv` → `region="aachen_eifel"`.
+- İndirme alanları **çakışmaz** (`contract.REGIONS`):
+  - `argentina` — ülke (La Rioja + P2 eğitimi)
+  - `aachen_eifel` — bbox `5.96, 50.44, 6.44, 50.83` (lon_min, lat_min, lon_max, lat_max).
+    Hohes Venn dahil, Belçika tarafı da içinde (sınır değil kutu).
+- `region` uygulamada filtre değildir: uygulama **koordinatla** filtreler (`query.PRESETS`).
+  `PRESETS["Aachen/Eifel"]` = indirme kutusu (verinin olmadığı alanı göstermesin diye).
 
 ## 6. `weight_harm`
 - **Anlam (sözleşme):** herhangi bir satır kümesi için `Σ weight_harm` = o kümenin
@@ -102,9 +116,9 @@ Tüm script'ler repo kökünden: `python pipeline/<ad>.py`. Hepsi `main()` + `if
 ### 7.1 `pipeline/ingest.py` (P1)
 | | |
 |---|---|
-| Girdi | `data/raw/<region>/*.csv` — FIRMS ülke dosyaları: archive (`fire_archive_*`, ülke-yıl dosyaları), NRT (`fire_nrt_*`) |
+| Girdi | `data/raw/<region>/*.csv` — DL_FIRE: archive (`fire_archive_*`), NRT (`fire_nrt_*`) |
 | Çıktı | `data/hotspots.parquet` — §1 şeması, `validate_hotspots(df, "ingest")` geçer |
-| Çıktı | `data/satellite_coverage.csv` — `satellite, source, first_date, last_date, n_rows, nrt_cutoff, n_nrt_dropped` |
+| Çıktı | `data/satellite_coverage.csv` — `region, satellite, source, first_date, last_date, n_rows, nrt_cutoff, n_nrt_dropped` (her bölge × uydu × kaynak bir satır) |
 | stdout | uydu × yıl satır sayısı, atılan satırlar (sebep bazında) |
 
 ### 7.2 `pipeline/harmonize.py` (P2)
@@ -143,7 +157,9 @@ MONTH_LABELS: list[str]                   # ["Oca", …, "Ara"]
 
 data_info() -> dict
     # {"path": str, "is_mock": bool, "has_harm": bool, "start": Timestamp, "end": Timestamp,
-    #  "n_rows": int, "satellites": list[str], "contract": "1.1"}
+    #  "n_rows": int, "satellites": list[str],
+    #  "satellite_ranges": {uydu: (ilk_tarih, son_tarih)},   ← v1.2, uydu değişim çizgileri için
+    #  "contract": "1.2"}
 
 get_hotspots(geom, start=None, end=None, harmonized=False) -> pd.DataFrame
     # geom: PRESETS adı | (lon_min, lat_min, lon_max, lat_max) | GeoJSON Feature/Polygon/MultiPolygon
@@ -185,4 +201,5 @@ True ise uygulama "SENTETİK TEST VERİSİ" uyarısı gösterir. Bilimsel değer
 | Sürüm | Değişiklik | Etkilenen |
 |---|---|---|
 | 1.0 | İlk şema (CLAUDE.md §3) | herkes |
-| 1.1 | bölgeler ülke dosyalarına çevrildi (`germany`, `belgium`, `argentina`); `sensor` açık karar olarak işaretlendi; `lat/lon` → `latitude/longitude`; `bright` → `brightness`; `brightness_2` eklendi; `confidence` artık **orijinal değer** (eski `confidence_raw`), sınıf → `confidence_class`; `fire_type` → `type`; yeni: `datetime_utc`, `version`, `region`; archive/NRT kuralı uydu bazlı tarih kesimine çevrildi; `satellite_coverage.csv` eklendi; `weight_harm` yöntemi P2'ye devredildi; `contract.py` doğrulayıcı | P1, P2, P3, P5 |
+| 1.1 | `sensor` açık karar olarak işaretlendi; `lat/lon` → `latitude/longitude`; `bright` → `brightness`; `brightness_2` eklendi; `confidence` artık **orijinal değer** (eski `confidence_raw`), sınıf → `confidence_class`; `fire_type` → `type`; yeni: `datetime_utc`, `version`, `region`; archive/NRT kuralı uydu bazlı tarih kesimine çevrildi; `satellite_coverage.csv` eklendi; `weight_harm` yöntemi P2'ye devredildi; `contract.py` doğrulayıcı | P1, P2, P3, P5 |
+| 1.2 | P1 gerçek başlık bulguları: enstrüman uydu kodundan (DL_FIRE'da VIIRS de `brightness` kullanıyor), indirme biçimi tablosu; NOAA-21 başlangıcı 2023-03-01; bölgeler = DL_FIRE indirme alanları (`argentina` ülke, `aachen_eifel` bbox), ülke-yıl dosyaları kullanılmaz; archive/NRT cutoff **(region, satellite)** bazında; `satellite_coverage.csv`'ye `region` sütunu; `data_info()["satellite_ranges"]`; `PRESETS["Aachen/Eifel"]` = indirme kutusu; `to_csv_bytes` her OS'ta `\n` | P1, P2, P5, P6 |

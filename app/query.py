@@ -1,4 +1,4 @@
-"""Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4 (v1.1).
+"""Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4 (v1.2).
 
 P5 (app.py) parquet'i doğrudan okumaz; sadece bu modülü kullanır:
     from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes
@@ -34,7 +34,7 @@ DATA_CANDIDATES = [
 # ad -> (lon_min, lat_min, lon_max, lat_max)
 PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Hohes Venn": (5.95, 50.45, 6.25, 50.60),
-    "Aachen/Eifel": (5.9, 50.2, 7.0, 50.9),
+    "Aachen/Eifel": (5.96, 50.44, 6.44, 50.83),   # = indirme alanı (contract.REGIONS)
     "La Rioja (AR)": (-69.7, -31.9, -65.4, -27.6),
 }
 
@@ -63,7 +63,7 @@ def data_path() -> Path:
 def _load(path_str: str, mtime: float) -> pd.DataFrame:
     df = pd.read_parquet(path_str, engine="pyarrow")
     try:
-        validate_hotspots(df, stage="any")
+        validate_hotspots(df, stage="any", max_rows=200_000)  # tam kontrol P1/P2 yazarken yapıldı
     except ValueError as e:
         raise ValueError(f"{path_str} sözleşmeye uymuyor:\n{e}") from e
     return df
@@ -87,8 +87,15 @@ def data_info() -> dict[str, Any]:
         "end": df["acq_date"].max(),
         "n_rows": len(df),
         "satellites": sorted(df["satellite"].astype(str).unique().tolist()),
+        "satellite_ranges": _satellite_ranges(df),
         "contract": CONTRACT_VERSION,
     }
+
+
+def _satellite_ranges(df: pd.DataFrame) -> dict[str, tuple[pd.Timestamp, pd.Timestamp]]:
+    """Uydu → (ilk, son) tespit tarihi, VERİDEN. Grafikteki uydu değişim çizgileri için."""
+    g = df.groupby("satellite", observed=True)["acq_date"].agg(["min", "max"]).sort_values("min")
+    return {str(s): (r["min"], r["max"]) for s, r in g.iterrows()}
 
 
 # ---------------------------------------------------------------- sorgular
@@ -202,7 +209,7 @@ def anomaly(matrix: pd.DataFrame, year: int, month: int) -> dict[str, Any]:
 def to_csv_bytes(df: pd.DataFrame) -> bytes:
     """st.download_button için CSV (UTF-8, index'li tablolar için index korunur)."""
     keep_index = df.index.name is not None
-    return df.to_csv(index=keep_index).encode("utf-8")
+    return df.to_csv(index=keep_index, lineterminator="\n").encode("utf-8")  # Windows'ta da \n
 
 
 # ---------------------------------------------------------------- hızlı kontrol

@@ -18,13 +18,13 @@
 
 ## 1. Proje
 NASA FIRMS aktif yangın **tespitleri** ile 2000–2026 arası **tutarlı bir aylık tespit takvimi**.
-Sorun: MODIS (Terra/Aqua, 2000→) ve VIIRS (S-NPP 2012→, NOAA-20 2018→, NOAA-21 2024→) farklı
+Sorun: MODIS (Terra/Aqua, 2000→) ve VIIRS (S-NPP 2012→2026-11-02, NOAA-20 2018→, NOAA-21 2023→) farklı
 hassasiyette; her yeni uydu ham sayılarda **yapay sıçrama** yaratır. Biz VIIRS tespitlerini
 **MODIS-eşdeğeri** birime çevirip (harmonizasyon) kesintisiz bir seri gösteriyoruz.
 Harmonizasyon katsayıları **doğrulanmamış bir hipotezdir**; P3'ün test metrikleri (2022–2024)
 gelmeden "doğru/kalibre" diye sunulmaz, metrikler geldikten sonra da sayılarıyla birlikte sunulur.
 
-Pitch'in ana görseli: ham takvimde 2012/2018/2024 sıçramaları → harmonize takvimde yok.
+Pitch'in ana görseli: ham takvimde 2012/2018/2023 sıçramaları → harmonize takvimde yok.
 Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tespit artışları
 **Nisan 2011** ve **Ağustos 2026**'da takvimde görünmeli. (Tespit ≠ doğrulanmış yangın olayı.)
 
@@ -40,7 +40,7 @@ Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tesp
 
 Ortak dosyalara (`requirements.txt` vb.) paket eklemek gerekirse → Barış'a söyle, o ekler.
 
-## 3. Veri sözleşmesi v1.1 (KİLİTLİ — değişiklik sadece P4 onayıyla)
+## 3. Veri sözleşmesi (KİLİTLİ — değişiklik sadece P4 onayıyla; sürüm: `docs/CONTRACT.md` başlığı)
 Tam şema, tekrar kuralları, bölge adları, pipeline girdi/çıktıları ve `query.py` API'si:
 **`docs/CONTRACT.md`** (aşağıda içe aktarılıyor). Kod karşılığı: **`contract.py`**
 (sabitler + `validate_hotspots(df, stage)`). P1 ve P2 parquet yazmadan önce doğrulayıcıyı çağırır.
@@ -75,9 +75,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from contract import validate_hotspots
 ```
 
-## 4. Çalıştırma
+## 4. Ortam ve çalıştırma
+### 4.1 Herkes AYNI ortamı kullanır (ZORUNLU)
+- **Python 3.12** (`.python-version`) + `requirements.txt`'teki **sabit (==) sürümler**.
+  Sebep: pandas 2 ↔ 3 gibi farklar aynı kodda farklı dtype üretir → `contract.py` doğrulaması
+  bir makinede geçer, diğerinde patlar. Streamlit Cloud da 3.12 ile yayınlanır.
+- Kurulum `uv` ile (Python 3.12'yi kendisi indirir, yönetici izni gerekmez):
+  ```bash
+  # uv yoksa:  Linux/Mac: curl -LsSf https://astral.sh/uv/install.sh | sh
+  #            Windows (PowerShell): powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  uv venv --python 3.12 .venv
+  source .venv/bin/activate            # Windows: .venv\Scripts\activate
+  uv pip install -r requirements.txt
+  python tests/smoke_test.py           # ilk satır: "ortam: Python 3.12 + requirements.txt sürümleri" ✅
+  ```
+- Claude: kod çalıştırmadan önce `.venv` aktif mi ve Python 3.12 mi kontrol et. Değilse kurulumu
+  kullanıcıya hatırlat; sistem Python'uyla ya da `pip install <paket>` ile devam etme.
+- Paket ekleme/sürüm değiştirme sadece P4 (`requirements.txt`). Değişince herkes
+  `uv pip install -r requirements.txt` çalıştırır.
+
+### 4.2 Çalıştırma
 ```bash
-python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+source .venv/bin/activate
 python pipeline/ingest.py        # P1 → data/hotspots.parquet
 python pipeline/harmonize.py     # P2 → data/hotspots_harm.parquet, monthly_grid.parquet, k_factors.csv
 python pipeline/validate.py      # P3 → docs/validation/
@@ -87,7 +106,7 @@ streamlit run app/app.py         # P5
 Tüm script'ler **repo kökünden** çalıştırılır; yollar köke göreli.
 
 ## 5. Kod kuralları
-- Python 3.11+, pandas + pyarrow. Kod/değişken isimleri İngilizce, yorumlar Türkçe olabilir.
+- Python 3.12 (§4.1), pandas 3 + pyarrow. Kod/değişken isimleri İngilizce, yorumlar Türkçe olabilir.
 - Her pipeline script'i: `main()` + `if __name__ == "__main__":`, başta yol sabitleri.
 - Sessiz hata yok: beklenmeyen sütun/değer → açık `ValueError`.
 - Büyük veriyi tek seferde belleğe alma gerekiyorsa `pyarrow`/`usecols` kullan.
