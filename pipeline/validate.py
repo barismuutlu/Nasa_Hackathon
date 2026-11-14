@@ -63,6 +63,9 @@ SPLITS = {"train": TRAIN_YEARS, "test": TEST_YEARS,
 # 2022–2024'te Aachen/Eifel'de çok az MODIS tespiti var (n çok küçük), bu yüzden ek dönem:
 TRANSFER_SPLIT = ("transfer_2012-2026", range(2012, 2027))
 TRANSFER_REGIONS = {"aachen_eifel"}
+# metrics.json'a sadece CONTRACT §7.3 (v1.3) izinli split'ler yazılır. transfer_2012-2026 P4 onayı
+# bekliyor → şimdilik sadece summary.md'de. Onaylanınca buraya eklenir.
+JSON_SPLITS = set(SPLITS)
 SCALES = {"0.25deg": 0.25, "1deg": 1.0}
 # rapor bölgeleri → CONTRACT §5 region değerleri (contract.REGIONS ile aynı olmalı)
 REPORT_REGIONS = {"argentina": ["argentina"], "aachen_eifel": ["aachen_eifel"]}
@@ -399,6 +402,43 @@ def test_year_breakdown(df: pd.DataFrame, has_harm: bool) -> tuple[pd.DataFrame,
     return yearly, monthly
 
 
+def transfer_without_event(tables: dict[str, pd.DataFrame], has_harm: bool) -> dict[str, tuple]:
+    """Transfer metriği, Venn olayı (2026-08) dahil / hariç — R² tek olaydan mı geliyor?"""
+    out = {}
+    if not has_harm:
+        return out
+    name, years = TRANSFER_SPLIT
+    for scale, tab in tables.items():
+        t = tab[tab.region.isin(TRANSFER_REGIONS) & tab.year.isin(years)]
+        t = t[(t.pred > 0) | (t.true > 0)]
+        ex = t[~((t.year == 2026) & (t.month == 8))]
+        out[scale] = (metrics(t.pred.to_numpy(float), t.true.to_numpy(float)),
+                      metrics(ex.pred.to_numpy(float), ex.true.to_numpy(float)))
+    return out
+
+
+def ratio_diagnostics(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Arjantin, ham veri: MODIS / (aktif VIIRS uydusu başına VIIRS) — yıl bazında ve 2022 aylık.
+    Harmonizasyondan bağımsız: 2022 sapması (P2: harm/MODIS=1.18) kesintiden mi, yörünge kaymasından mı,
+    yoksa yıla özgü mü? Aktif uydu = o ay o bölgede ≥1 tespiti olan VIIRS uydusu."""
+    a = df[(df.region.astype(str) == "argentina") & df.year.between(TRAIN_YEARS.start, TEST_YEARS.stop - 1)]
+    c = a.groupby([a.year.astype(int), a.month.astype(int), a.satellite.astype(str)]).size() \
+         .unstack(fill_value=0)
+    for sat in ("Terra", "Aqua", "SNPP", "NOAA20", "NOAA21"):
+        if sat not in c:
+            c[sat] = 0
+    v = c[["SNPP", "NOAA20", "NOAA21"]]
+    c["viirs1"] = v.sum(axis=1) / (v > 0).sum(axis=1).replace(0, np.nan)
+    c["modis"] = c.Terra + c.Aqua
+    y = c.groupby(level=0)[["Terra", "Aqua", "modis", "viirs1"]].sum()
+    y["oran"] = y.modis / y.viirs1
+    y["aqua_terra"] = y.Aqua / y.Terra
+    r = (c.modis / c.viirs1).unstack(level=1)
+    m2022 = (r.loc[2022] / r.loc[TRAIN_YEARS.start:TRAIN_YEARS.stop - 1].median()) \
+        if 2022 in r.index else pd.Series(dtype=float)
+    return y, m2022
+
+
 # ---------------------------------------------------------------- özet
 
 def rel(p: Path) -> str:
@@ -409,7 +449,8 @@ def fmt(v, spec=".2f"):
     return "—" if v is None or (isinstance(v, float) and np.isnan(v)) else format(v, spec)
 
 
-def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown) -> str:
+def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown, diag,
+                  tr_ev=None) -> str:
     def get(method, region, scale="1deg", split="test"):
         return next(r for r in rows if r["method"] == method and r["region"] == region
                     and r["split"] == split and r["scale"] == scale)
@@ -446,6 +487,19 @@ def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown)
     for mth, r in monthly.iterrows():
         lines.append(f"| {MONTH_TR[mth - 1]} | {r.modis:.0f} | {fmt(r.harm, '.1f')} | {fmt(r.oran)} | "
                      + " | ".join(f"{r[c]:.0f}" for c in sat_cols) + " |")
+    yr, m22 = diag
+    tr = yr.loc[TRAIN_YEARS.start:TRAIN_YEARS.stop - 1, "oran"]
+    lines += ["", "## 2022 sapması — ham veriden tanı (Arjantin)", "",
+              "oran = MODIS / (aktif VIIRS uydusu başına VIIRS). Harmonizasyondan bağımsız. "
+              f"Eğitim yılları aralığı {tr.min():.3f}–{tr.max():.3f} (medyan {tr.median():.3f}).", "",
+              "| yıl | MODIS | VIIRS/uydu | oran | oran / eğitim medyanı | Aqua/Terra |",
+              "|---|---|---|---|---|---|"]
+    for yy, r in yr.iterrows():
+        lines.append(f"| {yy}{' (test)' if yy in TEST_YEARS else ''} | {r.modis:.0f} | {r.viirs1:.0f} | "
+                     f"{r.oran:.3f} | {r.oran / tr.median():.2f} | {r.aqua_terra:.2f} |")
+    if len(m22):
+        lines += ["", "2022 aylık oran / aynı ayın eğitim medyanı (< 1 → MODIS beklenenden az): "
+                  + ", ".join(f"{MONTH_TR[k - 1][:3]} {v:.2f}" for k, v in m22.items())]
     lines += ["", "## Hohes Venn (kutu lon 5.95–6.25, lat 50.45–50.60)", "",
               f"'Görünüyor' = değer > 0 ve aynı ayın diğer yıllar ortalamasının ≥ {VISIBLE_RATIO:.0f} katı.", "",
               "| seri | ay | sonuç | görünüyor |", "|---|---|---|---|"]
@@ -458,19 +512,57 @@ def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown)
         (OUT / "summary.md").write_text(text, encoding="utf-8")
         return text
     ar, gb = get("harm", "argentina"), get("harm", "aachen_eifel", split=TRANSFER_SPLIT[0])
+    ar22, ar23 = get("harm", "argentina", split="test_2022"), get("harm", "argentina", split="test_2023-2024")
     vh = {(v["year"], v["month"]): v for v in venn if v["mode"] == "harm"}
     venn_ok = all(v["visible"] for v in vh.values())
     lines += ["", "## Sunum için 3 cümle (P6)", "",
               f"1. Arjantin'de (eğitim bölgesi), eğitimde kullanılmayan 2022–2024 yıllarında harmonize "
               f"VIIRS tahmini MODIS tespit sayısını 1° hücre-ay ölçeğinde R²={fmt(ar['r2'])} ile, "
-              f"toplamda {fmt(ar['bias_pct'], '+.0f')}% sapmayla tahmin ediyor.",
+              f"toplamda {fmt(ar['bias_pct'], '+.1f')}% sapmayla tahmin ediyor.",
+              f"   Eğitimde hiç olmayan NOAA-21'in de aktif olduğu 2023–2024'te: "
+              f"R²={fmt(ar23['r2'])}, toplam sapma {fmt(ar23['bias_pct'], '+.1f')}% "
+              f"(2022, NOAA-21 öncesi: R²={fmt(ar22['r2'])}, {fmt(ar22['bias_pct'], '+.1f')}%).",
               f"2. Aynı katsayılar Aachen/Eifel'e (transfer, 2012–2026) taşındığında R²={fmt(gb['r2'])}, "
-              f"toplam sapma {fmt(gb['bias_pct'], '+.0f')}% (n={gb['n']} hücre-ay).",
+              f"toplam sapma {fmt(gb['bias_pct'], '+.1f')}% (n={gb['n']} hücre-ay)"
+              + (f"; bu R² büyük ölçüde tek olaydan (Ağustos 2026): o ay hariç R²={fmt(tr_ev['1deg'][1]['r2'])}, "
+                 f"sapma {fmt(tr_ev['1deg'][1]['bias_pct'], '+.1f')}%." if tr_ev and "1deg" in tr_ev else "."),
               f"3. Hohes Venn'de bilinen yangın olaylarıyla örtüşen tespit artışı "
               + ("Nisan 2011 ve Ağustos 2026'da harmonize takvimde görünüyor"
                  if venn_ok else "harmonize takvimde her iki ayda da belirgin DEĞİL")
               + ": " + "; ".join(f"{MONTH_TR[m - 1]} {y} → {v['text']}"
                                   for (y, m), v in vh.items()) + "."]
+    # ---- sınırlamalar (dürüst raporlama; P2 + P4 isteği)
+    vm = {(v["mode"], v["year"], v["month"]): v["value"] for v in venn}
+    h26, m26 = vm.get(("harm", 2026, 8)), vm.get(("modis", 2026, 8))
+    yearly, monthly = breakdown
+    y22 = yearly.loc[("argentina", 2022), "oran"] if ("argentina", 2022) in yearly.index else np.nan
+    hi_m = [f"{MONTH_TR[k - 1][:3]} {r.oran:.2f}" for k, r in monthly.iterrows() if r.oran >= 1.15]
+    lo_m = [f"{MONTH_TR[k - 1][:3]} {r.oran:.2f}" for k, r in monthly.iterrows() if r.oran < 1.15]
+    t1 = (tr_ev or {}).get("1deg")
+    lines += ["", "## Sınırlamalar ve gelecek çalışma", "",
+              f"- **2022 (test) fazla tahmin:** Arjantin'de Σharm/ΣMODIS = {fmt(y22)}. Fazlalık yangın "
+              f"sezonunda ({', '.join(hi_m)}); kesinti ayları dahil diğer aylar 1'e yakın ({', '.join(lo_m)}). "
+              "Ham veride de 2022'de MODIS/VIIRS oranı eğitim aralığının dışında (yukarıdaki tanı tablosu) → "
+              "S-NPP/Aqua kesintisi ya da kalıcı yörünge kayması ile açıklanmıyor (2023–2024 normale dönüyor).",
+              f"- **Aachen/Eifel Ağustos 2026 (bölge aktarımı, tek olay, n küçük):** harm/MODIS = "
+              f"{fmt(h26 / m26 if h26 and m26 else np.nan)} ({fmt(h26, '.0f')} / {fmt(m26, '.0f')}). "
+              "Fallback'ten değil (P2: 40–50 bandının k'sıyla bile +%50); olayın örtük k'sı 0.176, "
+              "eğitimdeki tüm k'lar ≥ 0.20."]
+    if t1:
+        a, b = t1
+        lines.append(f"- **Transfer R² tek olaydan etkileniyor:** Aachen/Eifel 1° R²={fmt(a['r2'])} "
+                     f"(n={a['n']}, bias {fmt(a['bias_pct'], '+.1f')}%); 2026-08 hariç R²={fmt(b['r2'])}, "
+                     f"bias {fmt(b['bias_pct'], '+.1f')}% (n={b['n']}). Yani olağan dönemde toplam seviye "
+                     "tutuyor, hücre-ay deseni zayıf; büyük olayda fazla tahmin.")
+    lines += ["- **Yorum (hipotez, doğrulanmadı):** k yangın büyüklüğüne bağlı — tek büyük yangın "
+              "cephesinde VIIRS (375 m) MODIS'e (1 km) göre orantısız çok piksel sayıyor; k sadece enlem "
+              "bandı × mevsim × uyduya göre katmanlı olduğu için bunu yakalayamıyor.",
+              "- **Gelecek çalışma:** k'yı yangın büyüklüğüne (aynı gün komşu tespit kümesinin alanı / "
+              "toplam FRP) göre koşullamak; transfer için Avrupa'dan ikinci bir eğitim bölgesi.",
+              f"- **Örneklem:** Aachen/Eifel'de 2022–2024'te toplam "
+              f"{int(yearly.loc['aachen_eifel', 'modis'].sum()) if 'aachen_eifel' in yearly.index.get_level_values(0) else '—'}"
+              " MODIS tespiti → bölge test metriği istatistiksel olarak anlamsız; bu yüzden "
+              "transfer_2012-2026 raporlandı (metrics.json'da değil, P4 onayı bekliyor)."]
     text = "\n".join(lines) + "\n"
     (OUT / "summary.md").write_text(text, encoding="utf-8")
     return text
@@ -490,8 +582,9 @@ def main() -> None:
         print("ℹ️  weight_harm boş (P1 verisi) → sadece ham sayımlar; harm metrikleri atlanıyor.\n")
     print(f"Girdi: {rel(input_path)}  ({len(df):,} satır)")
 
-    k_note = (f"k_factors.csv: {len(pd.read_csv(K_PATH))} satır (test yıllarının k'ya girmediğini "
-              "P2 ile teyit et)" if K_PATH.exists() else "k_factors.csv yok")
+    k_note = (f"k_factors.csv: {len(pd.read_csv(K_PATH))} satır. P2 teyidi: k sadece Arjantin 2012–2021 "
+              "VIIRS'ten, Terra-only ağırlığı 2003–2011'den → test yılları (2022–2024) k'ya girmedi."
+              if K_PATH.exists() else "k_factors.csv yok")
 
     rows, tables = compute_metrics(df, has_harm)
     data_kind = "mock" if is_mock else ("harm" if has_harm else "raw")
@@ -499,14 +592,16 @@ def main() -> None:
         r["data"] = data_kind
     grid_note = crosscheck_grid(tables["0.25deg"]) if has_harm and not is_mock else \
         "monthly_grid çapraz kontrolü atlandı (sentetik ya da harmonize olmayan girdi)"
-    (OUT / "metrics.json").write_text(json.dumps(rows, indent=2, ensure_ascii=False),
+    json_rows = [r for r in rows if r["split"] in JSON_SPLITS]
+    (OUT / "metrics.json").write_text(json.dumps(json_rows, indent=2, ensure_ascii=False),
                                       encoding="utf-8")
 
     plot_pred_vs_true(tables, rows, is_mock, has_harm)
     plot_annual(df, is_mock, has_harm)
     venn = venn_check(df, is_mock, has_harm)
     print(write_summary(rows, venn, is_mock, input_path, grid_note, k_note,
-                        test_year_breakdown(df, has_harm)))
+                        test_year_breakdown(df, has_harm), ratio_diagnostics(df),
+                        transfer_without_event(tables, has_harm)))
 
     weak = [r for r in rows if r["method"] == "harm" and r["split"] == "test"
             and (r["r2"] is None or r["r2"] < 0.5)]
