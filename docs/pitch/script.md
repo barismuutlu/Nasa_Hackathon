@@ -58,3 +58,21 @@ Ardından tarih aralığını 14–17 Ağustos 2026'ya daraltıyoruz. Az önceki
 - Nisan tabanını 2001–2025 ve 2011 hariç olarak koru; “26 yıl” ifadesini kullanma.
 - Ağustos penceresini tam ay gibi anlatma; 17 kat oranını dönüşüm katsayısına çevirme.
 - P2/P3 sonucu gelmezse bekleyen-sonuç cümlelerini koru. Sentetik ekran görüntüsü yerine doğrulanmış sayı kartı kullan.
+
+## Cloud taslağından korunan 60 saniyelik kanıt anlatımı
+
+Bu kısa alternatif, yukarıdaki 3:55 konuşmaya eklenmez; gerektiğinde kanıt bölümünün yerine kullanılır. Süreler taslaktır, kronometreli prova yapılmadı.
+
+### 00:00–00:25 · Nisan ve veri kapsamı
+
+> Hohes Venn'de 25–26 Nisan 2011'de üç uydu geçişinde 17 MODIS piksel tespiti var. Diğer Nisanların, 2001–2025 içinde 2011 hariç, ortalaması 0,67. Bu, yaklaşık 25 katı ve incelenen dönemin en yüksek Nisanı. Tespitlerin tamamı Belçika tarafında; yalnız Almanya verisini alsaydık bunları göremeyecektik.
+
+### 00:25–00:45 · Ağustos ve gözlem sistemi
+
+> 14–17 Ağustos 2026 olay penceresinde MODIS 105, VIIRS 1.794 tespit veriyor: yaklaşık 17 kat fark. Bu, aynı-geçiş deneyi veya evrensel katsayı değil. Ham sayıları yorumlarken gözlem sistemi farkını da hesaba katmalıyız.
+
+### 00:45–01:00 · Çözüme geçiş
+
+> Amacımız tespitleri ortak bir MODIS-eşdeğeri tahminle karşılaştırmak. Harmonize sayı ve bağımsız test sonuçları bekleniyor; başarıyı ancak bu sonuçlarla değerlendireceğiz.
+
+Hazırlık notu: Harmonize sayı `[TBD — Bahtiyar]`; doğrulama metrikleri `[TBD — Oğuzhan]`. Gerçek veri görselleri kullanılmalı; 17 piksel tespiti yangın olayı sayısına çevrilmemeli.

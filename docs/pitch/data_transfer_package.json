@@ -1,0 +1,21 @@
+{
+  "path": "data/raw/firms_country_archives_2000_2025.zip",
+  "bytes": 145340525,
+  "sha256": "9ad53aa3ff71aaccd86491f6f1065a4ea98519661c584995edca773adf7baf8f",
+  "raw_csv_files": 144,
+  "total_raw_rows": 6893939,
+  "coverage_complete": false,
+  "missing": [
+    "2026 archive/NRT: MODIS, S-NPP, NOAA-20",
+    "NOAA-21 archive/NRT: all available years"
+  ],
+  "archive_test": "passed",
+  "contract_version": "1.1",
+  "current_contract_version": "1.3",
+  "reported_in_contract_version": "1.2",
+  "provenance": "Previous cloud session; imported from P6_ibrahim.patch; source commit 8d5894c",
+  "local_archive_verified": false,
+  "use_for_current_pipeline": false,
+  "status": "historical_country_year_archive",
+  "notice": "Historical cloud report; raw CSVs and ZIP are not included in the patch. Do not extract into current v1.3 pipeline input directories. Current input is DL_FIRE archive + NRT for argentina and aachen_eifel."
+}

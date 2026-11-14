@@ -2,6 +2,8 @@
 
 Durum: P6 İbrahim'in yerel proje sayfası taslağı, 14 Kasım 2026. Sayısal dayanaklar ve kullanım sınırları: [pitch_facts.md](pitch_facts.md).
 
+Önceki cloud taslağıyla birleştirildi; geçerli veri sözleşmesi v1.3'tür. Cloud'un v1.2 tarihsel indirme ve ortam notları, güncel sonuçlarla karıştırılmadan korunur.
+
 ## Özet
 
 Uydu arşivindeki tespit sayısı arttığında, bunun ne kadarı gözlenen olaydan, ne kadarı değişen gözlem sisteminden kaynaklanıyor? Projemiz NASA FIRMS aktif yangın tespitlerinden 2000–2026 dönemini kapsaması hedeflenen bir aylık takvim oluşturuyor. MODIS ve VIIRS'in farklı çözünürlükleri ve değişen uydu kapsamı, ham sayıların yıllar arasında doğrudan karşılaştırılmasını güçleştiriyor. Ham tespitleri ve harmonize (MODIS-eşdeğeri) tahminleri birlikte incelemek, bu farkı görünür kılmayı amaçlıyor. Harmonizasyonun başarısına ilişkin sonuçlar henüz bekleniyor.
@@ -15,6 +17,8 @@ Yaklaşımımız, bölge ve tarih seçimiyle bu kayıtları aylık olarak incele
 ## Gerçek veriyle iki Hohes Venn örneği
 
 **Nisan 2011:** Süleyman'ın `data/hotspots.parquet` üzerinden doğruladığı sayımda, 25–26 Nisan'daki üç uydu geçişinde 17 MODIS piksel tespiti bulunuyor. Tümü bitki yangını tipinde ve Belçika tarafında. 2001–2025 döneminde 2011 dışındaki Nisanların ortalaması 0,67 tespit; Nisan 2011 bunun yaklaşık 25 katı ve **incelenen dönemin en yüksek Nisanı**. Bu bulgu, bilinen yangın olayıyla örtüşen bir tespit artışıdır.
+
+Bu örnek veri kapsamının önemini de gösterir: yalnız Almanya verisi alınsaydı Belçika tarafındaki bu tespitler görünmeyecekti. Sıralamanın “26 yıl” olarak ifade edilmesi için tam dönem teyidi hâlâ bekleniyor.
 
 **14–17 Ağustos 2026:** Aynı olay penceresinde 105 MODIS ve 1.794 VIIRS tespiti bulunuyor. VIIRS tespit sayısı MODIS'in yaklaşık 17 katı. Bu oran yalnızca bu bölge ve zaman penceresindeki ham tespitlerin karşılaştırmasıdır; evrensel bir harmonizasyon katsayısı değildir. Bu dört günlük sayım, Ağustos ayının tamamının toplamı olarak sunulmaz.
 
@@ -38,9 +42,13 @@ Sunumda kullanılacak metriklerin kaynağı `docs/validation/metrics.json`, aç�
 
 - NASA FIRMS: MODIS C6.1 ve VIIRS C2; DL_FIRE archive/NRT indirmeleri. S-NPP, NOAA-20 ve NOAA-21 VIIRS akışları sözleşmedeki uydu adlarıyla işlenir.
 - İndirme alanları: `argentina` ve `aachen_eifel`. Hohes Venn ve La Rioja, uygulamada koordinatlarla seçilen görüntüleme alanlarıdır; indirme alanı adı doğrudan uygulama filtresi değildir.
+- `aachen_eifel` indirme kutusu `(5.96, 50.44, 6.44, 50.83)`; sıra `(lon_min, lat_min, lon_max, lat_max)`. Hedef dönem Kasım 2000–2026'dır; her uydu için gerçek veri kapsamı geçerlidir. Grafiklerde uydu kapsamı `data_info()["satellite_ranges"]` üzerinden alınır.
+- Ham `version` değerleri korunur; enstrüman uydu kodundan belirlenir. DL_FIRE VIIRS çıktıları da `brightness/bright_t31` başlıklarını kullanabilir. MCD12Q1, MCD64A1/VNP64A1 ve HLS, bu FIRMS girdi akışının parçası değildir.
 - Eski ülke-yıl CSV dosyaları sözleşme v1.2 §5 uyarınca kapsam dışıdır; bu kural mevcut v1.3'te de korunur.
 - Ortam: Python 3.12 ve kökteki `requirements.txt` dosyasının sabit sürümleri. Veri işleme için pandas, NumPy ve PyArrow; coğrafi sorgular için Shapely; arayüz için Streamlit, Folium ve Plotly.
 - Görsel kaynak gösterimi: “NASA FIRMS / Worldview”. Gerçek veriyle doğrulanmış ekran görüntüleri bekleniyor; bu taslakta görüntü kullanılmadı. Sentetik veri ekran görüntüleri sunuma alınmaz; NASA logosu kullanılmaz.
+
+Önceki cloud oturumunda indirildiği bildirilen 144 ülke-yıl CSV'si güncel pipeline'a dahil edilmez. Ayrıntılar [data_handoff.md](data_handoff.md), [data_download_manifest.csv](data_download_manifest.csv) ve [data_transfer_package.json](data_transfer_package.json) içinde tarihsel kayıt olarak korunmuştur. Cloud Python kontrolleri [environment_check.md](environment_check.md) içindedir; yerelde aynı kontrollerin çalıştırıldığı anlamına gelmez.
 
 ## Kullanım ve sonraki adımlar
 

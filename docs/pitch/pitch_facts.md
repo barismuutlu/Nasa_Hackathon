@@ -4,7 +4,7 @@ P6 İbrahim · 14 Kasım 2026 · Yerel çalışma notu.
 
 ## Kaynak ve kapsam
 
-Bu belgedeki olay sayımları, Süleyman'ın `data/hotspots.parquet` üzerinden doğruladığı ve kullanıcının bu oturumda ilettiği sonuçlardır. Yerelde yeniden hesaplanmadı. İlk incelemede `data/hotspots.parquet`, harmonize veri ve P3 metrik dosyaları bulunmadı. Ayrı cloud oturumundaki dosyalar veya commit'ler bu çalışmanın kaynağı değildir.
+Bu belgedeki olay sayımları, Süleyman'ın `data/hotspots.parquet` üzerinden doğruladığı ve kullanıcının bu oturumda ilettiği sonuçlardır. Yerelde yeniden hesaplanmadı. İlk incelemede `data/hotspots.parquet`, harmonize veri ve P3 metrik dosyaları bulunmadı. Önceki cloud çalışması `P6_ibrahim.patch` ile sonradan aktarıldı; bu belge yerel taslakla cloud notlarını birleştirir. Tarihsel indirme ve ortam sonuçları ayrı kaynak kayıtlarıdır; yerel test sonucu olarak sunulmaz.
 
 Kurallar: [CLAUDE.md](../../CLAUDE.md), [CONTRACT.md](../CONTRACT.md) ve [P6 rolü](../../ekip/P6_Ibrahim.CLAUDE.md). Yerel sözleşme v1.3'tür; v1.2'nin DL_FIRE ve ülke-yıl dosyalarını dışlama kuralları korunur.
 
@@ -31,6 +31,16 @@ Türkçe metinlerde `1.794` binlik, `0,67` ondalık gösterimdir. Tarih filtrele
 - Nisan 2011'deki bitki yangını tipi ve Belçika konumu bilgisi Ağustos 2026 kayıtlarına genellenmez. NRT kayıtlarında `type` boş olabilir.
 - Uygulamadaki ortalama ve sıra, sorgunun dönemine ve sensör kapsamına bağlıdır. Arayüzün varsayılan tabanı Süleyman'ın 2001–2025 karşılaştırmasıyla eşleşmeden “25 kat” veya sabit bir sıra paydası beklenmez.
 - Uyduların farklı gözlem özellikleri ham karşılaştırmayı etkiler; tek örnek hangi etkenin ne kadar katkı yaptığını ölçmez. “Uydu sıçramaları tamamen giderildi” sonucu P3 kanıtı gelmeden kullanılmaz.
+- Ağustos karşılaştırması eşleştirilmiş aynı-geçiş deneyi değildir. Sensör, çözünürlük, uydu sayısı ve gözlem kapsamının etkilerini içerebilir. “VIIRS her zaman 17 kat daha hassas” denmez; 2011 ve 2026 ham sayılarıyla yangın büyüklüğü veya şiddeti kıyaslanmaz.
+- FIRMS'in bitki yangını tipi bağımsız olay doğrulaması değildir. Üç uydu geçişi de üç ayrı yangın anlamına gelmez.
+
+## Cloud notlarından korunan bağlam
+
+Nisan 2011 tespitlerinin tamamı Belçika tarafında olduğu için yalnız Almanya verisi alınsaydı bu tespitler kapsam dışında kalacaktı. Bu örnek, `aachen_eifel` indirme kutusunun ülke sınırını aşmasının neden önemli olduğunu gösterir.
+
+Yuvarlanmış ortalamayla `17 / 0,67 ≈ 25,37`; Ağustos olay penceresinde `1.794 / 105 ≈ 17,09`. Konuşmada “yaklaşık 25 katı” ve “yaklaşık 17 katı” kullanılır. 2001–2025 aralığı 25 takvim Nisanı içerir; 2011 çıkarılınca 24 olası referans Nisanı kalır. Verinin bu ayları kapsadığı ayrıca teyit edilmelidir; bu takvim hesabı “26 yıl” sıralamasını doğrulamaz.
+
+Önceki 144 ülke-yıl CSV'sine ait [manifest](data_download_manifest.csv), [aktarım paketi kaydı](data_transfer_package.json) ve [veri teslim notu](data_handoff.md) tarihsel arşivi belgeler. Bunlar güncel DL_FIRE girdisi veya P3 doğrulama kanıtı değildir. Cloud ortamının bildirdiği kontroller [environment_check.md](environment_check.md) içinde yerel durumdan ayrılmıştır.
 
 ## Veri ve yöntem çerçevesi
 
