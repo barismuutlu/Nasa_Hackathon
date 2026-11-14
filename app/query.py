@@ -1,4 +1,4 @@
-"""Veri katmanı — sahibi P4 Barış. API sözleşmesi: kök CLAUDE.md §4.
+"""Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4 (v1.1).
 
 P5 (app.py) parquet'i doğrudan okumaz; sadece bu modülü kullanır:
     from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes
@@ -9,6 +9,7 @@ Bu modül Streamlit'e bağımlı değildir (pipeline/ ve testlerden de kullanıl
 from __future__ import annotations
 
 import os
+import sys
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ import shapely
 from shapely.geometry import shape
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from contract import CONTRACT_VERSION, MOCK_VERSION, validate_hotspots  # noqa: E402
 
 # Öncelik sırası: ilk bulunan dosya kullanılır (kök CLAUDE.md §4)
 DATA_CANDIDATES = [
@@ -34,12 +37,6 @@ PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Aachen/Eifel": (5.9, 50.2, 7.0, 50.9),
     "La Rioja (AR)": (-69.7, -31.9, -65.4, -27.6),
 }
-
-REQUIRED_COLUMNS = [
-    "lat", "lon", "acq_date", "acq_time", "year", "month", "instrument", "satellite",
-    "confidence", "confidence_raw", "frp", "bright", "scan", "track", "daynight",
-    "fire_type", "source", "weight_harm",
-]
 
 MONTH_LABELS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
 
@@ -65,9 +62,10 @@ def data_path() -> Path:
 @lru_cache(maxsize=2)
 def _load(path_str: str, mtime: float) -> pd.DataFrame:
     df = pd.read_parquet(path_str, engine="pyarrow")
-    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
-    if missing:
-        raise ValueError(f"{path_str} şemaya uymuyor, eksik sütunlar: {missing} (CLAUDE.md §3.1)")
+    try:
+        validate_hotspots(df, stage="any")
+    except ValueError as e:
+        raise ValueError(f"{path_str} sözleşmeye uymuyor:\n{e}") from e
     return df
 
 
@@ -83,12 +81,13 @@ def data_info() -> dict[str, Any]:
     df = load_hotspots()
     return {
         "path": str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p),
-        "is_mock": "mock" in p.parts,
+        "is_mock": bool((df["version"] == MOCK_VERSION).any()) or "mock" in p.parts,
         "has_harm": bool(df["weight_harm"].notna().any()),
         "start": df["acq_date"].min(),
         "end": df["acq_date"].max(),
         "n_rows": len(df),
         "satellites": sorted(df["satellite"].astype(str).unique().tolist()),
+        "contract": CONTRACT_VERSION,
     }
 
 
@@ -119,12 +118,13 @@ def get_hotspots(geom, start=None, end=None, harmonized: bool = False) -> pd.Dat
 
     geom: PRESETS anahtarı, bbox (lon_min, lat_min, lon_max, lat_max) ya da
           GeoJSON dict (streamlit-folium `last_active_drawing` doğrudan verilebilir).
-    start, end: tarih (dahil); None = sınırsız.
+    start, end: UTC tarih (dahil); None = sınırsız.
+    Dönüş: CONTRACT §1 sütunları, aynı dtype'lar; 0 satır olabilir.
     harmonized: True → sadece harmonize seriye katkı veren satırlar (weight_harm > 0).
     """
     (lon_min, lat_min, lon_max, lat_max), poly = _parse_geom(geom)
     df = load_hotspots()
-    m = df["lon"].between(lon_min, lon_max) & df["lat"].between(lat_min, lat_max)
+    m = df["longitude"].between(lon_min, lon_max) & df["latitude"].between(lat_min, lat_max)
     if start is not None:
         m &= df["acq_date"] >= pd.Timestamp(start)
     if end is not None:
@@ -134,7 +134,7 @@ def get_hotspots(geom, start=None, end=None, harmonized: bool = False) -> pd.Dat
     out = df.loc[m]
     if poly is not None and len(out):
         inside = shapely.intersects_xy(poly,  # sınır dahil (bbox ile tutarlı)
-                                         out["lon"].to_numpy(), out["lat"].to_numpy())
+                                         out["longitude"].to_numpy(), out["latitude"].to_numpy())
         out = out.loc[inside]
     return out.copy()
 

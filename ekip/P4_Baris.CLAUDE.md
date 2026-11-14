@@ -3,13 +3,13 @@
 Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolün.
 
 ## Sahip olduğun dosyalar
-- `app/query.py`
+- `app/query.py`, `contract.py`, `docs/CONTRACT.md`, `tests/smoke_test.py`
 - `CLAUDE.md`, `ekip/*`, `requirements.txt`, `.gitignore`
 - `data/mock/`, `data/deploy/`
 
 ## Liderlik
 - Entegrasyon + hızlı kararlar. Şema/API değişiklik talepleri sana gelir → 5 dk içinde karar ver,
-  kararı kök `CLAUDE.md`'ye yaz, push et, gruba duyur.
+  kararı `docs/CONTRACT.md`'ye (değişiklik günlüğüyle) yaz, push et, gruba duyur.
 - Her kontrol noktasında (10:30, 13:00, 16:30, 19:00) 5 dk toplantı: herkes "bitti / engel / sonraki".
 - 15 dk'dan fazla takılan varsa yardım et ya da kapsamı küçült.
 - Pazar 12:00 feature freeze'i uygula.
@@ -17,10 +17,10 @@ Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolü
 ## Görev
 1. **08:55** — repo iskeleti push: `CLAUDE.md`, `ekip/`, `.gitignore`, `requirements.txt`, klasörler.
    Herkese: `cp`/`echo "@ekip/<dosya>" > CLAUDE.local.md` talimatı.
-2. **11:00** — `data/mock/hotspots_mock.parquet`: §3.1 şemasıyla sahte veri
+2. **11:00** — `data/mock/hotspots_mock.parquet`: CONTRACT §1 şemasıyla sentetik veri (`version="MOCK"`)
    (Aachen/Eifel + La Rioja, 2000–2026, tüm uydular, VIIRS eklenince sayılar artsın,
    Nisan 2011 & Ağustos 2026 Venn'de pik). `weight_harm` = basit sahte değer. → Yusuf (P5).
-3. **`app/query.py`** — API kök `CLAUDE.md` §4:
+3. **`app/query.py`** — API: CONTRACT §7.4:
    - `PRESETS`: `"Aachen/Eifel": (5.9, 50.2, 7.0, 50.9)`, `"La Rioja (AR)": (-69.7, -31.9, -65.4, -27.6)`,
      `"Hohes Venn": (5.95, 50.45, 6.25, 50.60)`
    - `get_hotspots()` — bbox ya da GeoJSON Polygon (shapely ile içerde mi), tarih filtresi.
