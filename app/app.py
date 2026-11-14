@@ -6,15 +6,15 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from folium.plugins import Draw
+from folium.plugins import Draw, HeatMap
 from streamlit_folium import st_folium
 
 from query import PRESETS, MONTH_LABELS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes
 
 EN_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 MONTHS = [tr if tr == en else f"{tr}/{en}" for tr, en in zip(MONTH_LABELS, EN_MONTHS)]
-MAX_POINTS = 5000
-LOW_MEAN = 0.1  # anomali tabanı bunun altındaysa "kat" yerine "normalde ≈0"
+MAX_POINTS = 20000  # ısı katmanı tek dizi → 5000 ayrı işaretten çok daha hafif
+LOW_MEAN, MAX_RATIO = 1.0, 100  # taban < 1 VE kat ≥ 100 ise "kat" yerine "normalde ≈0" (2011-04 harm 29× kalır)
 
 st.set_page_config(page_title="Aktif Yangın Tespit Takvimi", page_icon="🔥", layout="wide")
 # Streamlit'in sağ üstteki animasyonlu "çalışıyor" figürlerini gizle (profesyonel görünüm);
@@ -82,55 +82,90 @@ x0, y0, x1, y1 = PRESETS[preset]
 if st.session_state.get("_preset") != preset:
     st.session_state["_preset"] = preset
     st.session_state["drawn"] = None
-    st.session_state["view"] = ([(y0 + y1) / 2, (x0 + x1) / 2], 9)
+    st.session_state["map_ver"] = st.session_state.get("map_ver", 0) + 1
+st.session_state.setdefault("map_ver", 0)
+
+
+def reset_drawing():
+    """Hazır bölgeye dön: çizimi sil + harita bileşeninin hafızasını sıfırla (yeni key)."""
+    st.session_state["drawn"] = None
+    st.session_state["map_ver"] += 1
 geom_key = st.session_state.get("drawn") or json.dumps([x0, y0, x1, y1])
 
 # harita: Harmonize'de sadece weight_harm > 0; grafikler: her zaman tüm veri
 df_map = load(geom_key, pd.Timestamp(d0), pd.Timestamp(d1), mode == "harm")
 df = load(geom_key, pd.Timestamp(d0), pd.Timestamp(d1), False)
 
+
+def _bounds(geojson_str):
+    """Çizilen geometrinin sınırları → harita oraya odaklansın (konum takibi gerekmez)."""
+    pts = []
+
+    def walk(c):
+        if isinstance(c, (list, tuple)) and c and isinstance(c[0], (int, float)):
+            pts.append(c)
+        elif isinstance(c, (list, tuple)):
+            for x in c:
+                walk(x)
+    walk(json.loads(geojson_str).get("coordinates", []))
+    lons, lats = [q[0] for q in pts], [q[1] for q in pts]
+    return [[min(lats), min(lons)], [max(lats), max(lons)]]
+
+
 col_map, col_cal = st.columns([1, 1])
 with col_map:
     st.subheader("Harita / Map")
-    center, zoom = st.session_state["view"]
-    m = folium.Map(location=center, zoom_start=zoom, tiles="OpenStreetMap")
+    m = folium.Map(tiles="OpenStreetMap")
     folium.Rectangle([[y0, x0], [y1, x1]], color="#440154", fill=False, weight=2).add_to(m)
+    # çizilen alan Draw aracının KENDİ katmanında → çöp kutusu onu silebilir
+    drawn_fg = folium.FeatureGroup(name="drawn")
     if st.session_state.get("drawn"):
-        # çizilen alan yeniden yüklemeden sonra da görünsün
-        folium.GeoJson(json.loads(st.session_state["drawn"]),
-                       style_function=lambda _: {"color": "#21918c", "weight": 3, "fillOpacity": 0.1}).add_to(m)
-    Draw(draw_options={"polyline": False, "circle": False, "marker": False,
+        g = json.loads(st.session_state["drawn"])
+        # dış halkalar: Polygon → 1, MultiPolygon → her parçanın dış halkası
+        polys = [g["coordinates"]] if g.get("type") == "Polygon" else g.get("coordinates", [])
+        for ring in (poly[0] for poly in polys if poly):
+            folium.Polygon([[lat, lon] for lon, lat in ring], color="#21918c", weight=3,
+                           fill=True, fill_opacity=0.1).add_to(drawn_fg)
+        m.fit_bounds(_bounds(st.session_state["drawn"]))
+    else:
+        m.fit_bounds([[y0, x0], [y1, x1]])
+    drawn_fg.add_to(m)
+    Draw(feature_group=drawn_fg,
+         draw_options={"polyline": False, "circle": False, "marker": False,
                        "circlemarker": False, "polygon": True, "rectangle": True},
-         edit_options={"edit": False}).add_to(m)
+         edit_options={"edit": False, "remove": True}).add_to(m)
     pts = df_map.sample(MAX_POINTS, random_state=0) if len(df_map) > MAX_POINTS else df_map
-    for r in pts[["latitude", "longitude"]].itertuples(index=False):
-        folium.CircleMarker([r.latitude, r.longitude], radius=2, color="#fde725", fill=True,
-                            fill_opacity=0.7, weight=0).add_to(m)
-    out = st_folium(m, height=480, use_container_width=True,
-                    returned_objects=["last_active_drawing", "center", "zoom"], key=f"map_{preset}")
-    out = out or {}
-    drawing = out.get("last_active_drawing")
-    if drawing and drawing.get("geometry"):
-        new_key = json.dumps(drawing["geometry"])
-        if new_key != st.session_state.get("drawn"):
-            st.session_state["drawn"] = new_key
-            # kullanıcının baktığı yeri koru → harita başa dönmesin
-            c = out.get("center")
-            if c and out.get("zoom"):
-                st.session_state["view"] = ([c["lat"], c["lng"]], out["zoom"])
+    if len(pts):
+        # tek ısı katmanı (viridis) — binlerce ayrı SVG işaret yerine
+        HeatMap(pts[["latitude", "longitude"]].to_numpy().tolist(), radius=8, blur=10, min_opacity=0.35,
+                gradient={0.2: "#3b528b", 0.45: "#21918c", 0.7: "#5ec962", 1.0: "#fde725"}).add_to(m)
+    # sadece çizim olayları döner → kaydırma/yakınlaştırma sayfayı yeniden çalıştırmaz
+    out = st_folium(m, height=480, use_container_width=True, returned_objects=["all_drawings"],
+                    key=f"map_{preset}_{st.session_state['map_ver']}")
+    drawings = (out or {}).get("all_drawings")
+    if drawings is not None:  # None = henüz çizim olayı yok
+        if drawings:
+            new_key = json.dumps(drawings[-1]["geometry"])  # en son çizilen alan geçerli
+            if new_key != st.session_state.get("drawn"):
+                st.session_state["drawn"] = new_key
+                st.rerun()
+        elif st.session_state.get("drawn"):
+            # çöp kutusuyla silindi → hazır bölgeye dön
+            reset_drawing()
             st.rerun()
-    if st.session_state.get("drawn") and st.button("Çizimi temizle / Clear drawing"):
-        st.session_state["drawn"] = None
-        st.rerun()
-    st.caption(f"{len(df_map):,} tespit / detections"
-               + (f" (haritada {MAX_POINTS:,} örnek / sampled)" if len(df_map) > MAX_POINTS else ""))
+    if st.session_state.get("drawn"):
+        st.button("↩ Bölgeye dön / Back to region", on_click=reset_drawing,
+                  help=f"Çizimi sil, '{preset}' kutusuna dön / Clear drawing, back to preset")
+    st.caption(f"{len(df_map):,} tespit / detections · ısı haritası / heat map"
+               + (f" ({MAX_POINTS:,} örnek / sampled)" if len(df_map) > MAX_POINTS else ""))
     if preset == "Aachen/Eifel":
         st.caption("Not: Kutunun kuzeybatı köşesi (Aachen şehri, ≈50,73°K kuzeyi / 6,10°D batısı) indirme "
                    "kapsamı dışında; orada boş görünen alan 'tespit yok' değil 'veri yok' demektir. "
                    "/ Note: the NW corner (Aachen city) is outside the download area.")
 
 with st.sidebar:
-    st.download_button("CSV indir / Download", data=to_csv_bytes(df),
+    # CSV sadece butona basılınca üretilir (her etkileşimde 1,5 sn / 20 MB üretmek yerine)
+    st.download_button("CSV indir / Download", data=lambda: to_csv_bytes(df),
                        file_name=f"hotspots_{preset}_{mode}.csv", mime="text/csv",
                        disabled=df.empty)
     with st.expander("Veri / Data", expanded=False):
@@ -141,15 +176,18 @@ with st.sidebar:
             f"- Satır / Rows: {INFO['n_rows']:,}\n"
             f"- Sözleşme / Contract: v{INFO.get('contract', '?')}")
 
-# ---------- Takvim ----------
-with col_cal:
+# ---------- Takvim + Anomali (fragment) ----------
+# st.fragment: hücre tıklaması / renk ölçeği / yıl-ay seçimi sadece bu bölümü yeniden çalıştırır,
+# haritayı yeniden çizmez.
+@st.fragment
+def calendar_and_anomaly(df, mode, d0, d1):
     st.subheader("Aylık takvim / Monthly calendar")
     if mode == "harm" and not INFO.get("has_harm"):
         st.info("Harmonize veri henüz hazır değil / Harmonized data not ready yet")
-        st.stop()
+        return
     if df.empty:
         st.info("Bu bölgede tespit yok / No detections in this area")
-        st.stop()
+        return
     # tarih filtresi dışındaki aylar NaN (0 değil) → takvim, yıllık toplam ve anomali tabanı doğru
     mat = monthly_matrix(df, mode=mode, start=pd.Timestamp(d0), end=pd.Timestamp(d1))
     mat = mat.dropna(how="all")  # tamamen filtre dışı yıllar takvimde ve tabanda yok
@@ -230,69 +268,77 @@ with col_cal:
             st.session_state["_last_sel"] = sel
             st.session_state["sel_year"], st.session_state["sel_month"] = sel
 
-# ---------- Yıllık karşılaştırma ----------
-st.subheader("Yıllık toplam: Ham vs Harmonize / Annual total: Raw vs Harmonized")
-raw_y = monthly_matrix(df, "raw", start=pd.Timestamp(d0), end=pd.Timestamp(d1)).sum(axis=1, min_count=1).dropna()
-harm_y = monthly_matrix(df, "harm", start=pd.Timestamp(d0), end=pd.Timestamp(d1)).sum(axis=1, min_count=1).dropna()
-fy = go.Figure()
-fy.add_trace(go.Scatter(x=raw_y.index, y=raw_y.values, name="Ham / Raw", mode="lines+markers",
-                        line=dict(color="#440154", width=3)))
-if harm_y.notna().any():
-    fy.add_trace(go.Scatter(x=harm_y.index, y=harm_y.values, name="Harmonize / Harmonized",
-                            mode="lines+markers", line=dict(color="#35b779", width=3)))
-def _frac_year(ts):
-    return ts.year + (ts.day_of_year - 1) / 365.25
+    st.subheader("Anomali / Anomaly")
+    st.caption("tespit sayısı anomalisi / detection-count anomaly")
+    c1, c2, _ = st.columns([1, 1, 2])
+    years = [int(y) for y in mat.index]
+    if st.session_state.get("sel_year") not in years:
+        st.session_state["sel_year"] = 2026 if 2026 in years else years[-1]
+    st.session_state.setdefault("sel_month", 8)
+    yr = c1.selectbox("Yıl / Year", years, key="sel_year")
+    mo = c2.selectbox("Ay / Month", list(range(1, 13)), format_func=lambda i: MONTHS[i - 1], key="sel_month")
+    a = anomaly(mat, yr, mo)
+    k1, k2, k3, k4 = st.columns(4)
+    val, mean = a.get("value"), a.get("mean")
+    # sıfıra yakın tabanda z anlamsız büyür → ana gösterim sıra + "ortalamanın kaç katı"
+    ratio = val / mean if (fmt(val) != "–" and fmt(mean) != "–" and mean > 0) else None
+    k1.metric("Tespit / Detections", fmt(val))
+    k2.metric("Sıra / Rank", f"{a['rank']}/{a['n_years']}" if a.get("rank") is not None else "–",
+              help="1 = bu ay için en yüksek yıl / 1 = highest year for this month")
+    if ratio is not None and mean < LOW_MEAN and ratio >= MAX_RATIO:
+        # taban ≈0 iken "2115×" anlamsız → normal ay seviyesini yaz
+        k3.metric("Normal ay / Typical month", f"≈{mean:.1f}", "normalde ≈0 tespit/ay / normally ≈0 per month",
+                  delta_color="off")
+    else:
+        k3.metric("Ortalamanın katı / × mean",
+                  (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×") if ratio is not None else "–")
+    k4.metric("Durum / Label", a["label"])
+    st.caption(f"Ortalama ± std / Mean ± std: {fmt(mean)} ± {fmt(a['std'])} ({a['n_years']} yıl / years)"
+               f" · z = {fmt(a['z'], '.1f')}")
 
 
-# uydu geçiş tarihleri veriden (CONTRACT v1.2 §3) — sabit yazılmaz
-_ranges = INFO.get("satellite_ranges", {})
-_marks = [(_frac_year(_ranges[s][0]), lbl) for s, lbl in
-          [("SNPP", "S-NPP"), ("NOAA20", "NOAA-20"), ("NOAA21", "NOAA-21")] if s in _ranges]
-if "SNPP" in _ranges and _ranges["SNPP"][1] < INFO["end"] - pd.Timedelta(days=3):
-    _marks.append((_frac_year(_ranges["SNPP"][1]), "S-NPP bitti / ended"))
-for k, (xv, lbl) in enumerate(_marks):
-    fy.add_vline(x=xv, line_dash="dash", line_color="#888")
-    # etiketler sırayla üst/alt kademe → yakın tarihler (NOAA-21, S-NPP bitti) çakışmasın
-    fy.add_annotation(x=xv, y=1.0 if k % 2 == 0 else 1.09, yref="paper", text=lbl,
-                      showarrow=False, xanchor="right", yanchor="bottom",
-                      font=dict(size=11, color="#666"), bgcolor="rgba(255,255,255,0.8)")
-log_y = st.toggle("Log eksen / Log axis", value=False, key="annual_log",
-                  help="Log eksende aynı oranlı artış (ör. 4×) her seviyede aynı yükseklikte görünür; "
-                       "2012 S-NPP sıçraması da belirginleşir.")
-fy.update_layout(height=420, margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
-                 xaxis_title="Yıl / Year",
-                 yaxis=dict(title="Tespit / Detections" + (" (log)" if log_y else ""),
-                            type="log" if log_y else "linear"),
-                 legend=dict(orientation="h", y=-0.2))
-st.plotly_chart(fy, width="stretch")
-st.caption("Kısmi yıllar (ilk/son) eksik aylar nedeniyle düşük görünebilir. "
-           "/ First and last years are partial.")
+# ---------- Yıllık karşılaştırma (fragment) ----------
+@st.fragment
+def annual_chart(df, d0, d1):
+    st.subheader("Yıllık toplam: Ham vs Harmonize / Annual total: Raw vs Harmonized")
+    raw_y = monthly_matrix(df, "raw", start=pd.Timestamp(d0), end=pd.Timestamp(d1)).sum(axis=1, min_count=1).dropna()
+    harm_y = monthly_matrix(df, "harm", start=pd.Timestamp(d0), end=pd.Timestamp(d1)).sum(axis=1, min_count=1).dropna()
+    fy = go.Figure()
+    fy.add_trace(go.Scatter(x=raw_y.index, y=raw_y.values, name="Ham / Raw", mode="lines+markers",
+                            line=dict(color="#440154", width=3)))
+    if harm_y.notna().any():
+        fy.add_trace(go.Scatter(x=harm_y.index, y=harm_y.values, name="Harmonize / Harmonized",
+                                mode="lines+markers", line=dict(color="#35b779", width=3)))
+    def _frac_year(ts):
+        return ts.year + (ts.day_of_year - 1) / 365.25
 
-# ---------- Anomali ----------
-st.subheader("Anomali / Anomaly")
-st.caption("tespit sayısı anomalisi / detection-count anomaly")
-c1, c2, _ = st.columns([1, 1, 2])
-years = [int(y) for y in mat.index]
-if st.session_state.get("sel_year") not in years:
-    st.session_state["sel_year"] = 2026 if 2026 in years else years[-1]
-st.session_state.setdefault("sel_month", 8)
-yr = c1.selectbox("Yıl / Year", years, key="sel_year")
-mo = c2.selectbox("Ay / Month", list(range(1, 13)), format_func=lambda i: MONTHS[i - 1], key="sel_month")
-a = anomaly(mat, yr, mo)
-k1, k2, k3, k4 = st.columns(4)
-val, mean = a.get("value"), a.get("mean")
-# sıfıra yakın tabanda z anlamsız büyür → ana gösterim sıra + "ortalamanın kaç katı"
-ratio = val / mean if (fmt(val) != "–" and fmt(mean) != "–" and mean > 0) else None
-k1.metric("Tespit / Detections", fmt(val))
-k2.metric("Sıra / Rank", f"{a['rank']}/{a['n_years']}" if a.get("rank") is not None else "–",
-          help="1 = bu ay için en yüksek yıl / 1 = highest year for this month")
-if ratio is not None and mean < LOW_MEAN:
-    # taban ≈0 iken "2115×" anlamsız → normal ay seviyesini yaz
-    k3.metric("Normal ay / Typical month", f"≈{mean:.1f}", "normalde ≈0 tespit/ay / normally ≈0 per month",
-              delta_color="off")
-else:
-    k3.metric("Ortalamanın katı / × mean",
-              (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×") if ratio is not None else "–")
-k4.metric("Durum / Label", a["label"])
-st.caption(f"Ortalama ± std / Mean ± std: {fmt(mean)} ± {fmt(a['std'])} ({a['n_years']} yıl / years)"
-           f" · z = {fmt(a['z'], '.1f')}")
+
+    # uydu geçiş tarihleri veriden (CONTRACT v1.2 §3) — sabit yazılmaz
+    _ranges = INFO.get("satellite_ranges", {})
+    _marks = [(_frac_year(_ranges[s][0]), lbl) for s, lbl in
+              [("SNPP", "S-NPP"), ("NOAA20", "NOAA-20"), ("NOAA21", "NOAA-21")] if s in _ranges]
+    if "SNPP" in _ranges and _ranges["SNPP"][1] < INFO["end"] - pd.Timedelta(days=3):
+        _marks.append((_frac_year(_ranges["SNPP"][1]), "S-NPP bitti / ended"))
+    for k, (xv, lbl) in enumerate(_marks):
+        fy.add_vline(x=xv, line_dash="dash", line_color="#888")
+        # etiketler sırayla üst/alt kademe → yakın tarihler (NOAA-21, S-NPP bitti) çakışmasın
+        fy.add_annotation(x=xv, y=1.0 if k % 2 == 0 else 1.09, yref="paper", text=lbl,
+                          showarrow=False, xanchor="right", yanchor="bottom",
+                          font=dict(size=11, color="#666"), bgcolor="rgba(255,255,255,0.8)")
+    log_y = st.toggle("Log eksen / Log axis", value=False, key="annual_log",
+                      help="Log eksende aynı oranlı artış (ör. 4×) her seviyede aynı yükseklikte görünür; "
+                           "2012 S-NPP sıçraması da belirginleşir.")
+    fy.update_layout(height=420, margin=dict(l=10, r=10, t=70, b=10), hovermode="x unified",
+                     xaxis_title="Yıl / Year",
+                     yaxis=dict(title="Tespit / Detections" + (" (log)" if log_y else ""),
+                                type="log" if log_y else "linear"),
+                     legend=dict(orientation="h", y=-0.2))
+    st.plotly_chart(fy, width="stretch")
+    st.caption("Kısmi yıllar (ilk/son) eksik aylar nedeniyle düşük görünebilir. "
+               "/ First and last years are partial.")
+
+
+with col_cal:
+    calendar_and_anomaly(df, mode, d0, d1)
+if not df.empty:
+    annual_chart(df, d0, d1)
