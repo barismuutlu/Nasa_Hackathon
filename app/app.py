@@ -67,10 +67,6 @@ st.markdown("""<style>
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
 [data-testid="stMetricLabel"] p {color: #a39d92; font-size: .82rem;}
-.dossier {font-size: .9rem; font-variant-numeric: tabular-nums; line-height: 1.6; color: #ddd7cc;}
-.dossier td {padding: 1px 14px 1px 0; border: none;}
-.dossier tr {border: none;}
-.dossier .k {color: #948e83;}
 </style>""", unsafe_allow_html=True)
 
 
@@ -311,8 +307,6 @@ def _bounds(geojson_str):
 
 
 AREA = (_bounds(st.session_state["drawn"]) if st.session_state.get("drawn") else [[y0, x0], [y1, x1]])
-AREA_TXT = (f"{AREA[0][0]:.2f}–{AREA[1][0]:.2f}° lat, {AREA[0][1]:.2f}–{AREA[1][1]:.2f}° lon"
-            + (" (drawn)" if st.session_state.get("drawn") else ""))
 
 # map on top (full width), calendar below
 col_map, col_cal = st.container(), st.container()
@@ -480,29 +474,33 @@ def calendar_and_anomaly(df, mode, d0, d1):
     a = anomaly(mat, yr, mo)
     val, mean = a.get("value"), a.get("mean")
     ratio = val / mean if (fmt(val) != "–" and fmt(mean) != "–" and mean > 0) else None
-    k1, k3, k4, _ = st.columns(4)
-    k1.metric("Detections" if mode == "raw" else "MODIS-eq.", fmt(val))
-    if ratio is not None and mean < LOW_MEAN and ratio >= MAX_RATIO:
-        k3.metric("Typical month", f"≈{mean:.1f}", "baseline ≈0 per month", delta_color="off")
-    else:
-        k3.metric("× baseline mean", (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×")
-                  if ratio is not None else "–")
-    k4.metric("Anomaly", LABEL_EN.get(a["label"], a["label"]),
-              help="Detection-count anomaly against the same month in other years, not a fire-event class")
-    # record: both series side by side + context
+    # both series side by side (the point of the project), then how the month compares with a typical one
     try:
         v_other = float(other.loc[yr, mo])
     except (KeyError, TypeError, ValueError):
         v_other = float("nan")
     v_raw, v_harm = (val, v_other) if mode == "raw" else (v_other, val)
-    st.markdown(f"""<table class="dossier">
-<tr><td class="k">Region</td><td>{preset}</td><td class="k">Area</td><td>{AREA_TXT}</td></tr>
-<tr><td class="k">Month</td><td>{MONTHS[mo - 1]} {yr}</td><td class="k">Baseline</td>
-    <td>{fmt(mean)} ± {fmt(a['std'])} (n = {a['n_years']} years) · z = {fmt(a['z'])}</td></tr>
-<tr><td class="k">Raw</td><td>{fmt(v_raw, ',.0f')} detections</td><td class="k">Harmonized</td>
-    <td>{fmt(v_harm, ',.1f')} MODIS-eq.</td></tr>
-<tr><td class="k">Sources</td><td colspan="3">NASA FIRMS · MODIS C6.1 (Terra, Aqua) · VIIRS 375 m (S-NPP, NOAA-20, NOAA-21)</td></tr>
-</table>""", unsafe_allow_html=True)
+    series = "raw" if mode == "raw" else "harmonized"
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Raw detections", fmt(v_raw, ",.0f"), help="Detection count, all satellites")
+    k2.metric("Harmonized (MODIS-eq.)", fmt(v_harm, ",.1f"),
+              help="MODIS-equivalent estimate: what MODIS would be expected to count. An estimate, not a count.")
+    typical_help = (f"This month's {series} value divided by the mean of the same calendar month "
+                    "in the other years (the baseline).")
+    if ratio is not None and mean < LOW_MEAN and ratio >= MAX_RATIO:
+        k3.metric("Typical month", f"≈{mean:.1f}", "baseline ≈0 per month", delta_color="off", help=typical_help)
+    else:
+        k3.metric("× typical month", (f"{ratio:.0f}×" if ratio >= 10 else f"{ratio:.1f}×")
+                  if ratio is not None else "–", help=typical_help)
+    k4.metric("Anomaly", LABEL_EN.get(a["label"], a["label"]),
+              help="Detection-count anomaly against the same month in other years, not a fire-event class")
+    m0 = pd.Timestamp(int(yr), int(mo), 1)
+    m1 = m0 + pd.offsets.MonthEnd(0)
+    partial = (f" · <b>Partial month:</b> data cover {max(m0, cov0):%d %b} – {min(m1, cov1):%d %b} only."
+               if fmt(val) != "–" and (m0 < cov0 or m1 > cov1) else "")
+    st.markdown(f'<div class="figcap">Typical {MONTHS[mo - 1]} ({series} series, same month in the other years): '
+                f'{fmt(mean)} ± {fmt(a["std"])} (n = {a["n_years"]} years) · z = {fmt(a["z"])}{partial}</div>',
+                unsafe_allow_html=True)
 
 
 # ---------- Annual totals (fragment) ----------
