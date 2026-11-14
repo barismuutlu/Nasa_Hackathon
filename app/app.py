@@ -11,7 +11,7 @@ import streamlit as st
 from folium.plugins import Draw, HeatMap
 from streamlit_folium import st_folium
 
-from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes
+from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes, forecast
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 MAX_POINTS = 20000  # heat layer is one array → far lighter than thousands of separate markers
@@ -26,6 +26,7 @@ FIRE_SCALE = [[0.0, "#fff7c2"], [0.25, "#ffd84a"], [0.5, "#fe9b2d"], [0.75, "#d9
 C_FRAME = "#ff9f1c"  # region frame on satellite imagery
 C_DRAWN = "#21918c"  # user-drawn area: teal stays visible on top of the orange heat layer
 C_NODATA = "#34322e"  # calendar background (no data)
+BACKTEST_PNG = Path(__file__).resolve().parents[1] / "docs" / "forecast" / "backtest.png"  # P4, pipeline/forecast.py
 LOGO = Path(__file__).parent / "assets" / "firewatch_logo.png"  # transparent PNG, sits on the page background
 
 st.set_page_config(page_title="Active Fire Detection Calendar", page_icon=":material/local_fire_department:",
@@ -63,6 +64,7 @@ st.markdown("""<style>
                            text-decoration-color: #6f6a61;}
 .st-key-sitefooter button:hover {color: #e8833a;}
 .footnote {color: #a39d92; font-size: .88rem; margin-top: .2rem; text-align: center;}
+.outlook {color: #ece7de; font-size: 1.15rem; line-height: 1.5; margin: -.2rem 0 .7rem 0;}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
 .figcap b {color: #ece7de;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
@@ -80,6 +82,13 @@ def load(geom_key, start, end, harmonized):
     geom = json.loads(geom_key)
     geom = tuple(geom) if isinstance(geom, list) else geom
     return get_hotspots(geom, start=start, end=end, harmonized=harmonized)
+
+
+@st.cache_data(show_spinner=False)
+def outlook(geom_key):
+    """Experimental 30-day detection outlook for the selected area (query.forecast, CONTRACT §7.5); None outside Argentina."""
+    geom = json.loads(geom_key)
+    return forecast(tuple(geom) if isinstance(geom, list) else geom)
 
 
 @st.cache_data(show_spinner=False)
@@ -157,6 +166,19 @@ def page_validation():
                     'MODIS count in the same 1° cell and month. bias = Σpred / Σref − 1. '
                     'R² is scale-dependent (higher at 1° than 0.25°). Source: docs/validation/metrics.json '
                     '(P3).</div>', unsafe_allow_html=True)
+
+
+    fc = outlook(json.dumps(list(PRESETS["La Rioja (AR)"])))
+    if fc and BACKTEST_PNG.exists():
+        y0_, y1_ = fc["backtest_years"]
+        st.subheader("Experimental 30-day outlook: backtest")
+        st.markdown(
+            f"Backtest {y0_}–{y1_} on Argentina 1° cells, each year fitted on earlier years only: the outlook "
+            f"gets the direction (above or below normal) right in **{fc['direction_hit_rate']:.0%}** of cases "
+            f"(chance 50%), skill against the seasonal normal {fc['skill']:.2f}. NASA POWER weather and an "
+            "El Niño index were tested as extra inputs and did not improve it. "
+            "This is an outlook for detection counts, not a fire forecast.")
+        st.image(str(BACKTEST_PNG), width=900)
 
 
 def page_limitations():
@@ -503,6 +525,23 @@ def calendar_and_anomaly(df, mode, d0, d1):
                 unsafe_allow_html=True)
 
 
+# ---------- Outlook, next 30 days (experimental; P4 model, query.forecast) ----------
+def outlook_section(geom_key):
+    st.subheader("Outlook — next 30 days")
+    fc = outlook(geom_key)
+    if fc is None:
+        st.markdown('<div class="facts">Outlook available for Argentina only (model calibrated there).</div>',
+                    unsafe_allow_html=True)
+        return
+    st.markdown(
+        f'<div class="outlook">{fc["start"]:%d %b} – {fc["end"]:%d %b %Y}: <b>≈{fc["pred"]:,.0f}</b> MODIS-eq. '
+        f'detections (80% range {fc["p10"]:,.0f}–{fc["p90"]:,.0f}); normal {fc["normal"]:,.0f} '
+        f'→ <b>{fc["label"]}</b></div>'
+        f'<div class="figcap">EXPERIMENTAL · detection outlook, not a fire forecast · backtest '
+        f'{fc["backtest_years"][0]}–{fc["backtest_years"][1]}: direction right {fc["direction_hit_rate"]:.0%} · '
+        f'data through {fc["data_through"]:%d %b %Y} · {fc["n_cells"]} 1° cells</div>', unsafe_allow_html=True)
+
+
 # ---------- Annual totals (fragment) ----------
 @st.fragment
 def annual_chart(df, d0, d1):
@@ -555,4 +594,6 @@ with col_cal.container(border=True):
 if not df.empty:
     with st.container(border=True):
         annual_chart(df, d0, d1)
+with st.container(border=True):
+    outlook_section(geom_key)
 site_footer()
