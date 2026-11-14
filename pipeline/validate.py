@@ -67,9 +67,8 @@ SPLITS = {"train": TRAIN_YEARS, "test": TEST_YEARS,
 # 2022–2024'te Aachen/Eifel'de çok az MODIS tespiti var (n çok küçük), bu yüzden ek dönem:
 TRANSFER_SPLIT = ("transfer_2012-2026", range(2012, 2027))
 TRANSFER_REGIONS = {"aachen_eifel"}
-# metrics.json'a sadece CONTRACT §7.3 (v1.3) izinli split'ler yazılır. transfer_2012-2026 P4 onayı
-# bekliyor → şimdilik sadece summary.md'de. Onaylanınca buraya eklenir.
-JSON_SPLITS = set(SPLITS)
+# metrics.json'a sadece CONTRACT §7.3 izinli split'ler yazılır (v1.4: transfer_2012-2026 onaylı).
+JSON_SPLITS = set(SPLITS) | {TRANSFER_SPLIT[0]}
 SCALES = {"0.25deg": 0.25, "1deg": 1.0}
 # rapor bölgeleri → CONTRACT §5 region değerleri (contract.REGIONS ile aynı olmalı)
 REPORT_REGIONS = {"argentina": ["argentina"], "aachen_eifel": ["aachen_eifel"]}
@@ -606,7 +605,7 @@ def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown,
               f"- **Örneklem:** Aachen/Eifel'de 2022–2024'te toplam "
               f"{int(yearly.loc['aachen_eifel', 'modis'].sum()) if 'aachen_eifel' in yearly.index.get_level_values(0) else '—'}"
               " MODIS tespiti → bölge test metriği istatistiksel olarak anlamsız; bu yüzden "
-              "transfer_2012-2026 raporlandı (metrics.json'da değil, P4 onayı bekliyor)."]
+              "transfer_2012-2026 raporlandı."]
     text = "\n".join(lines) + "\n"
     (OUT / "summary.md").write_text(text, encoding="utf-8")
     return text

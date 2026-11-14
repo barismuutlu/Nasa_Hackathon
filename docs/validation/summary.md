@@ -126,4 +126,4 @@ Tespit, MCD64A1'in (aylık yanmış alan, ~500 m) ±16 gün içinde yanmış iş
 - **Transfer R² tek olaydan etkileniyor:** Aachen/Eifel 1° R²=0.79 (n=54, bias +35.0%); 2026-08 hariç R²=0.37, bias -4.3% (n=52). Yani olağan dönemde toplam seviye tutuyor, hücre-ay deseni zayıf; büyük olayda fazla tahmin.
 - **Yorum (hipotez, doğrulanmadı):** k yangın büyüklüğüne bağlı — tek büyük yangın cephesinde VIIRS (375 m) MODIS'e (1 km) göre orantısız çok piksel sayıyor; k sadece enlem bandı × mevsim × uyduya göre katmanlı olduğu için bunu yakalayamıyor.
 - **Gelecek çalışma:** k'yı yangın büyüklüğüne (aynı gün komşu tespit kümesinin alanı / toplam FRP) göre koşullamak; transfer için Avrupa'dan ikinci bir eğitim bölgesi.
-- **Örneklem:** Aachen/Eifel'de 2022–2024'te toplam 7 MODIS tespiti → bölge test metriği istatistiksel olarak anlamsız; bu yüzden transfer_2012-2026 raporlandı (metrics.json'da değil, P4 onayı bekliyor).
+- **Örneklem:** Aachen/Eifel'de 2022–2024'te toplam 7 MODIS tespiti → bölge test metriği istatistiksel olarak anlamsız; bu yüzden transfer_2012-2026 raporlandı.

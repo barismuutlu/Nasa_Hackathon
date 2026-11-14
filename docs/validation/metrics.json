@@ -177,6 +177,28 @@
   },
   {
     "method": "harm",
+    "region": "aachen_eifel",
+    "split": "transfer_2012-2026",
+    "scale": "0.25deg",
+    "r2": 0.627,
+    "bias": 0.8641,
+    "bias_pct": 34.98,
+    "n": 68,
+    "data": "harm"
+  },
+  {
+    "method": "raw_viirs",
+    "region": "aachen_eifel",
+    "split": "transfer_2012-2026",
+    "scale": "0.25deg",
+    "r2": -258.0872,
+    "bias": 30.8971,
+    "bias_pct": 1250.6,
+    "n": 68,
+    "data": "harm"
+  },
+  {
+    "method": "harm",
     "region": "argentina",
     "split": "train",
     "scale": "1deg",
@@ -349,6 +371,28 @@
     "bias": 6.2222,
     "bias_pct": 1400.0,
     "n": 9,
+    "data": "harm"
+  },
+  {
+    "method": "harm",
+    "region": "aachen_eifel",
+    "split": "transfer_2012-2026",
+    "scale": "1deg",
+    "r2": 0.7932,
+    "bias": 1.0881,
+    "bias_pct": 34.98,
+    "n": 54,
+    "data": "harm"
+  },
+  {
+    "method": "raw_viirs",
+    "region": "aachen_eifel",
+    "split": "transfer_2012-2026",
+    "scale": "1deg",
+    "r2": -209.9421,
+    "bias": 38.9074,
+    "bias_pct": 1250.6,
+    "n": 54,
     "data": "harm"
   }
 ]
