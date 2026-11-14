@@ -40,6 +40,11 @@ Ortak kurallar, şema ve takvim kök `CLAUDE.md`'de. Bu dosya sadece senin rolü
 | 16:30 | query.py gerçek veriyle | Yusuf (P5) |
 | Pazar 09:00 | `data/deploy/` | Yusuf (P5) |
 
+## Teslim öncesi (Pazar, feature freeze'den önce)
+- [ ] `README.md` İngilizceye çevrilecek (şu an Türkçe; jüri İngilizce okuyacak). Yer tutucuları doldur:
+      demo linki, sunum linki, R²/sapma (docs/validation/metrics.json).
+- [ ] Repo public yapılacak (jüri "projenin tamamını" değerlendiriyor).
+
 ## Bitti kontrolü
 - [ ] `monthly_matrix(get_hotspots(PRESETS["Hohes Venn"]), "harm")` → 2011-04 ve 2026-08 > 0
 - [ ] Mock ve gerçek veri arasında geçişte app.py'de tek satır değişmiyor

@@ -34,7 +34,7 @@ Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tesp
 | P1 Veri Mühendisi | Süleyman | `pipeline/ingest.py`, `data/sample/` |
 | P2 Harmonizasyon | Bahtiyar | `pipeline/harmonize.py` |
 | P3 ML & Doğrulama | Oğuzhan | `pipeline/validate.py`, `docs/validation/` |
-| P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
+| P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `README.md`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
 | P5 Arayüz | Yusuf | `app/app.py`, `.streamlit/config.toml` |
 | P6 Sunum & Test | İbrahim | `docs/pitch/` |
 
