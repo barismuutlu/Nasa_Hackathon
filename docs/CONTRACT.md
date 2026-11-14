@@ -192,14 +192,21 @@ anomaly(matrix, year, month) -> dict
 
 to_csv_bytes(df) -> bytes                 # UTF-8; index adı varsa index de yazılır
 
-forecast(geom) -> dict | None             # v1.5, DENEYSEL (§7.5). Görünüm hücresi yoksa None (ör. Aachen)
-    # {"start", "end", "data_through": Timestamp,   30 günlük hedef penceresi (ör. 2026-11-15 → 12-14)
-    #  "pred", "p10", "p90": float,          bölge toplamı, MODIS-eşd. tespit; %80 aralık (geriye dönük test hatalarından)
-    #  "normal": float, "ratio": float,      normal = aynı pencerenin son 10 yıl ortalaması
-    #  "label": "below normal" (≤1/1,5×) | "near normal" | "above normal" (≥1,5×),
-    #  "n_cells": int, "skill": float, "direction_hit_rate": float, "backtest_years": (2015, 2025),
-    #  "cells": DataFrame}                   §7.5 satırları + "ratio" (hücre, yumuşatılmış: (e+1)/(n+1))
-    # hücre seçimi: 1° hücre MERKEZİ geom içinde; hotspot dosyasından bağımsız
+forecast(geom) -> dict | None             # v1.5, DENEYSEL (§7.5). Sadece mode="model" (Arjantin); yoksa None
+seasonal_outlook(geom) -> dict | None     # v1.5: model bölgesinde forecast() ile aynı; değilse mode="seasonal"; veri yoksa None
+    # ortak sözlük:
+    # "mode": "model"    → bölgede Arjantin görünüm hücresi var: test edilmiş 30 günlük görünüm
+    #         "seasonal" → hücre yok ama veri var (ör. Hohes Venn): TAHMİN YOK, pred = mevsimsel normal
+    # {"start", "end", "data_through": Timestamp,   30 günlük pencere (ör. 2026-11-15 → 12-14)
+    #  "pred", "p10", "p90": float,   model: beklenen + %80 aralık (test hatalarından); seasonal: normal + geçmiş yıllar %10–90
+    #  "normal": float,               aynı pencerenin son 10 yıl ortalaması (MODIS-eşd.)
+    #  "ratio": float (seasonal: NaN), "label": model → "below normal" (≤1/1,5×) | "near normal" | "above normal";
+    #                                          seasonal → "quiet season" (normal < 1) | "seasonal normal",
+    #  "history": Series yıl → aynı 30 günlük penceredeki tespit (geçmiş yıllar),
+    #  "profile": Series takvim ayı 1..12 → son 10 tam yılın aylık normali (get_hotspots + monthly_matrix),
+    #  "n_cells", "skill", "direction_hit_rate", "backtest_years" (seasonal: 0 / None),
+    #  "years_with_detections", "n_years" (sadece seasonal), "cells": DataFrame (§7.5 + "ratio"; seasonal: boş)}
+    # hücre seçimi: 1° hücre MERKEZİ geom içinde; model değerleri hotspot dosyasından bağımsız
 ```
 Veri dosyası önceliği: `$HOTSPOTS_PATH` → `data/hotspots_harm.parquet` → `data/hotspots.parquet`
 → `data/deploy/hotspots_deploy.parquet` → `data/mock/hotspots_mock.parquet`.
@@ -209,6 +216,7 @@ Veri dosyası önceliği: `$HOTSPOTS_PATH` → `data/hotspots_harm.parquet` → 
 |---|---|
 | Girdi | `data/hotspots_harm.parquet` (sadece `argentina`, günlük Σ `weight_harm`) — sadece NASA FIRMS |
 | Çıktı | `data/deploy/forecast.parquet` — aşağıda (küçük, git'e girer) |
+| Çıktı | `data/deploy/forecast_history.parquet` — `cell_lat`, `cell_lon` float64, `year` int16, `detections` float64: aynı 30 günlük pencerenin geçmiş yıllardaki Σ `weight_harm` (grafik) |
 | Çıktı | `docs/forecast/metrics.json`, `backtest.png`, `summary.md` |
 | Yöntem | P2 Bahtiyar'ın normal + kalıcılık modeli, 30 günlük kayan pencere: `log1p(hedef) = normal + a·hücre sapması + b·bölge sapması`; girdi penceresi hedeften 2 gün önce biter. Bölge toplamı = oran × son 10 yılın aritmetik normali (log toplamı −%24 yanlıydı) |
 | Test | 2015–2025, her ayın 15'i (132 başlangıç), her yıl yalnızca önceki yıllarla; beceri = 1 − MSE_model/MSE_normal |

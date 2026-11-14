@@ -21,8 +21,10 @@ Bu bir TESPİT sayısı görünümüdür, yangın tahmini değildir (CONTRACT §
 
 Çıktılar
     data/deploy/forecast.parquet     hücre başına canlı görünüm (git'e girer, query.forecast() okur)
+    data/deploy/forecast_history.parquet  hücre × geçmiş yıl: aynı 30 günlük penceredeki tespit (grafik için)
     docs/forecast/metrics.json       test metrikleri + aralık dilimleri
     docs/forecast/backtest.png       geriye dönük test: Arjantin ve La Rioja 30 günlük toplamlar
+    docs/forecast/backtest_dark.png  aynısı, saydam zemin (uygulamanın koyu teması)
     docs/forecast/summary.md
 
 Çalıştır (repo kökünden):  python pipeline/forecast.py
@@ -49,6 +51,7 @@ from query import PRESETS  # noqa: E402
 
 SRC = ROOT / "data" / "hotspots_harm.parquet"
 OUT = ROOT / "data" / "deploy" / "forecast.parquet"
+OUT_HIST = ROOT / "data" / "deploy" / "forecast_history.parquet"   # aynı pencere, geçmiş yıllar (grafik)
 DOCS = ROOT / "docs" / "forecast"
 
 REGION = "argentina"
@@ -174,25 +177,35 @@ def backtest(cum: np.ndarray, cells: pd.DataFrame, data_through: pd.Timestamp) -
 
 
 def plot_backtest(tot: pd.DataFrame, metrics: dict) -> None:
-    fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
-    for ax, (scope, title) in zip(axes, [("argentina", "Argentina"), ("la_rioja", "La Rioja (preset box)")]):
-        g = tot[tot["scope"] == scope].sort_values(["year", "key"])
-        x = pd.to_datetime(pd.DataFrame({"year": g["year"], "month": g["key"], "day": ORIGIN_DAY}))
-        ax.plot(x, g["next"], color="#222222", lw=2.2, label="Actual (harmonized, MODIS-eq.)")
-        ax.plot(x, g["pred"], color="#21918c", lw=2, label="Outlook (next 30 days)")
-        ax.plot(x, g["anorm"], color="#888888", lw=2, ls="--", label="Normal (10-year average)")
-        ax.set_yscale("log")
-        ax.set_title(title, loc="left", fontsize=13)
-        ax.set_ylabel("Detections / 30 days")
-        ax.grid(alpha=0.3)
-    axes[0].legend(loc="upper right", fontsize=10)
-    fig.suptitle(f"Experimental 30-day outlook — backtest {TEST_YEARS[0]}–{TEST_YEARS[1]} "
-                 f"({metrics['n_origins']} start dates, each year fitted on earlier years only)\n"
-                 f"Direction right {metrics['direction_hit_rate']:.0%} (chance 50%) · "
-                 f"skill vs. normal {metrics['skill_vs_normal']:.2f}", fontsize=13)
-    fig.tight_layout()
-    fig.savefig(DOCS / "backtest.png", dpi=130)
-    plt.close(fig)
+    """backtest.png (açık zemin, README) + backtest_dark.png (saydam zemin, açık yazı; uygulamanın koyu teması)."""
+    for fname, fg, actual, grid, transparent in [("backtest.png", "#222222", "#222222", "#cccccc", False),
+                                                  ("backtest_dark.png", "#e8e6e3", "#f2f2f2", "#555555", True)]:
+        with plt.rc_context({"text.color": fg, "axes.labelcolor": fg, "xtick.color": fg, "ytick.color": fg,
+                             "axes.edgecolor": fg}):
+            fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
+            for ax, (scope, title) in zip(axes, [("argentina", "Argentina"), ("la_rioja", "La Rioja (preset box)")]):
+                g = tot[tot["scope"] == scope].sort_values(["year", "key"])
+                x = pd.to_datetime(pd.DataFrame({"year": g["year"], "month": g["key"], "day": ORIGIN_DAY}))
+                ax.plot(x, g["next"], color=actual, lw=2.2, label="Actual (harmonized, MODIS-eq.)")
+                ax.plot(x, g["pred"], color="#21918c", lw=2, label="Outlook (next 30 days)")
+                ax.plot(x, g["anorm"], color="#888888", lw=2, ls="--", label="Normal (10-year average)")
+                ax.set_yscale("log")
+                ax.set_title(title, loc="left", fontsize=13)
+                ax.set_ylabel("Detections / 30 days")
+                ax.grid(alpha=0.3, color=grid)
+                if transparent:
+                    ax.set_facecolor("none")
+            leg = axes[0].legend(loc="upper right", fontsize=10)
+            if transparent:
+                leg.get_frame().set_facecolor("#222222")
+                leg.get_frame().set_edgecolor("#555555")
+            fig.suptitle(f"Experimental 30-day outlook — backtest {TEST_YEARS[0]}–{TEST_YEARS[1]} "
+                         f"({metrics['n_origins']} start dates, each year fitted on earlier years only)\n"
+                         f"Direction right {metrics['direction_hit_rate']:.0%} (chance 50%) · "
+                         f"skill vs. normal {metrics['skill_vs_normal']:.2f}", fontsize=13)
+            fig.tight_layout()
+            fig.savefig(DOCS / fname, dpi=130, transparent=transparent)
+            plt.close(fig)
 
 
 def same_window(year: int, start: pd.Timestamp) -> pd.Timestamp:
@@ -202,7 +215,8 @@ def same_window(year: int, start: pd.Timestamp) -> pd.Timestamp:
         return start.replace(year=year, day=28)
 
 
-def live_outlook(cum: np.ndarray, cells: pd.DataFrame, data_through: pd.Timestamp) -> pd.DataFrame:
+def live_outlook(cum: np.ndarray, cells: pd.DataFrame,
+                 data_through: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Hedef: data_through + GAP + 1 → +W gün. Normaller aynı takvim penceresinin geçmiş yıllarından."""
     start = data_through + pd.Timedelta(days=GAP + 1)
     end = start + pd.Timedelta(days=W - 1)
@@ -227,7 +241,9 @@ def live_outlook(cum: np.ndarray, cells: pd.DataFrame, data_through: pd.Timestam
     if out[["expected_geo", "normal_geo", "normal"]].isna().any().any() or (out["expected_geo"] < 0).any():
         raise ValueError("görünüm çıktısında NaN ya da negatif değer")
     print(f"  model: hücre sapması katsayısı {model.coef_[0]:.3f}, bölge sapması {model.coef_[1]:.3f}")
-    return out.reset_index(drop=True)
+    past = hist.merge(cells, on="ci")[["cell_lat", "cell_lon", "year", "next"]].rename(columns={"next": "detections"})
+    past = past.astype({"cell_lat": "float64", "cell_lon": "float64", "year": "int16", "detections": "float64"})
+    return out.reset_index(drop=True), past.reset_index(drop=True)
 
 
 def region_summary(out: pd.DataFrame, metrics: dict, mask) -> dict:
@@ -268,7 +284,9 @@ def write_summary(metrics: dict, out: pd.DataFrame) -> None:
         lines.append(f"| {name} | {r['pred']:,.0f} | {r['p10']:,.0f}–{r['p90']:,.0f} | {r['normal']:,.0f} | "
                      f"{r['ratio']:.2f}× |")
     lines += ["", "Inputs: NASA FIRMS only. NASA POWER weather and a NASA MERRA-2 El Niño index were tested and did "
-              "not improve skill (branch `p4/forecast-experiments`)."]
+              "not improve skill (branch `p4/forecast-experiments`).",
+              "", "Data: NASA FIRMS (MODIS C6.1, VIIRS 375 m). Citations and licenses: README → "
+              "\"Sources, citations and licenses\"."]
     (DOCS / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -283,8 +301,9 @@ def main() -> None:
         print(f"  {s:10s} toplam sapma {m['total_bias_pct']:+.1f}%  hata(log) {m['total_mae_log_model']} "
               f"/ normal {m['total_mae_log_normal']}  aralık log [{m['err_log_p10']}, {m['err_log_p90']}]")
     plot_backtest(tot, metrics)
-    out = live_outlook(cum, cells, data_through)
+    out, past = live_outlook(cum, cells, data_through)
     out.to_parquet(OUT, engine="pyarrow", index=False)
+    past.to_parquet(OUT_HIST, engine="pyarrow", index=False)
     meta = {"region": REGION, "cell_deg": 1.0, "window_days": W, "gap_days": GAP,
             "data_through": str(data_through.date()), "start": str(out["start"].iloc[0].date()),
             "end": str(out["end"].iloc[0].date()), "inputs": ["NASA FIRMS (harmonized)"],
