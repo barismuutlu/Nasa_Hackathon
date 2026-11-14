@@ -22,27 +22,23 @@ C_RAW, C_HARM = "#440154", "#21918c"  # viridis ends, used consistently for the 
 # calendar colour scale: fire palette, pale yellow = fewest detections → dark red = most
 FIRE_SCALE = [[0.0, "#fff7c2"], [0.25, "#ffd84a"], [0.5, "#fe9b2d"], [0.75, "#d93806"], [1.0, "#7a0403"]]
 C_FRAME = "#ff9f1c"  # region frame on satellite imagery
-C_NODATA = "#2a2d36"  # calendar background (no data)
+C_NODATA = "#34322e"  # calendar background (no data)
 
 st.set_page_config(page_title="Active Fire Detection Calendar", page_icon=":material/local_fire_department:",
                    layout="wide")
 st.markdown("""<style>
 [data-testid="stStatusWidget"] {visibility: hidden; height: 0;}
-.kicker {font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .78rem;
-         letter-spacing: .08em; text-transform: uppercase; color: #b5de2b; margin-bottom: -.4rem;}
-.abstract {color: #b8b5c8; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .6rem 0;}
-.figcap {color: #9a97ad; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
-.figcap b {color: #e8e6f0;}
-[data-testid="stMetricValue"] {font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-                               font-variant-numeric: tabular-nums;}
-[data-testid="stMetricLabel"] p {color: #9a97ad; text-transform: uppercase; font-size: .74rem; letter-spacing: .05em;}
-[data-testid="stSidebar"] h3 {font-size: .8rem; text-transform: uppercase; letter-spacing: .08em;
-                              color: #b5de2b; margin-top: .6rem;}
-.dossier {font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: .84rem;
-          font-variant-numeric: tabular-nums; line-height: 1.6; color: #d6d3e4;}
+.abstract {color: #c9c3b8; font-size: 1.0rem; line-height: 1.5; max-width: 980px; margin: -.4rem 0 .2rem 0;}
+.facts {color: #a39d92; font-size: .92rem; line-height: 1.5; max-width: 980px; margin: 0 0 .8rem 0;}
+.facts b {color: #ece7de; font-weight: 600;}
+.figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin-top: -.3rem;}
+.figcap b {color: #ece7de;}
+[data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
+[data-testid="stMetricLabel"] p {color: #a39d92; font-size: .82rem;}
+.dossier {font-size: .9rem; font-variant-numeric: tabular-nums; line-height: 1.6; color: #ddd7cc;}
 .dossier td {padding: 1px 14px 1px 0; border: none;}
 .dossier tr {border: none;}
-.dossier .k {color: #8a879c;}
+.dossier .k {color: #948e83;}
 </style>""", unsafe_allow_html=True)
 
 
@@ -103,7 +99,6 @@ def demo(preset_name, harm, year, month, annual_log=False):
 # ---------- Header ----------
 if INFO.get("is_mock"):
     st.warning("SYNTHETIC TEST DATA — not for interpretation")
-st.markdown('<div class="kicker">NASA Space Apps 2026 · FIRMS MODIS ↔ VIIRS</div>', unsafe_allow_html=True)
 st.title("Active Fire Detection Calendar, 2000–2026")
 st.markdown('<div class="abstract">Satellite active-fire detections (thermal anomalies) from NASA FIRMS, '
             'aggregated into a continuous monthly calendar. Each new VIIRS satellite inflates raw counts '
@@ -112,23 +107,13 @@ st.markdown('<div class="abstract">Satellite active-fire detections (thermal ano
             'not a confirmed fire event.</div>', unsafe_allow_html=True)
 
 _hm = headline_metric()
-s1, s2, s3, s4 = st.columns(4)
-with s1.container(border=True):
-    st.metric("Coverage", f"{INFO['start'].year}–{INFO['end'].year}",
-              f"{INFO['end'].year - INFO['start'].year + 1} years, monthly", delta_color="off")
-with s2.container(border=True):
-    st.metric("Satellites", len(INFO["satellites"]), "2 MODIS + 3 VIIRS", delta_color="off")
-with s3.container(border=True):
-    st.metric("Detections", f"{INFO['n_rows'] / 1e6:.2f} M", "active-fire pixels", delta_color="off")
-with s4.container(border=True):
-    if _hm:
-        st.metric("Independent test", f"R² = {_hm[0]:.2f}", f"bias {_hm[1]:+.1f}% · Argentina 2022–24, 1°",
-                  delta_color="off",
-                  help="k calibrated on Argentina 2012–2021; 2022–2024 held out. 1° cell-month scale.")
-    else:
-        st.metric("Independent test", "–")
+_test = (f" Independent test (Argentina 2022–2024, 1° cell-month): <b>R² = {_hm[0]:.2f}</b>, "
+         f"bias {_hm[1]:+.1f}%.") if _hm else ""
+st.markdown(f'<div class="facts">Data: <b>{INFO["start"].year}–{INFO["end"].year}</b>, monthly · '
+            f'<b>{len(INFO["satellites"])} satellites</b> (2 MODIS + 3 VIIRS) · '
+            f'<b>{INFO["n_rows"] / 1e6:.2f} million</b> detections.{_test}</div>', unsafe_allow_html=True)
 
-st.markdown('<div class="kicker">Quick start</div>', unsafe_allow_html=True)
+st.markdown("**Main events**")
 q1, q2, q3 = st.columns(3)
 q1.button("Hohes Venn · April 2011", width="stretch", on_click=demo, args=("Hohes Venn", True, 2011, 4),
           help="MODIS-only era: highest April in 26 years (harmonized)")
@@ -140,14 +125,10 @@ q3.button("La Rioja · satellite jumps", width="stretch", on_click=demo,
 
 # ---------- Sidebar ----------
 with st.sidebar:
-    st.header("Settings")
-    st.subheader("Region")
-    preset = st.selectbox("Region", list(PRESETS), key="preset", label_visibility="collapsed")
-    st.subheader("Series")
-    mode_lbl = st.radio("Series", [RAW, HARM], horizontal=True, key="mode_lbl", label_visibility="collapsed")
+    preset = st.selectbox("Region", list(PRESETS), key="preset")
+    mode_lbl = st.radio("Series", [RAW, HARM], horizontal=True, key="mode_lbl")
     mode = "raw" if mode_lbl == RAW else "harm"
     st.caption("Raw: detection count, all satellites. Harmonized: MODIS-equivalent estimate.")
-    st.subheader("Time")
     y_min, y_max = INFO["start"].year, INFO["end"].year
     st.session_state.setdefault("years", (y_min, y_max))
     y0, y1 = st.slider("Year range", y_min, y_max, key="years")
@@ -270,14 +251,11 @@ with col_map.container(border=True):
                    "the download area; empty cells there mean no data, not zero detections.")
 
 with st.sidebar:
-    st.subheader("Statistics")
+    st.divider()
     _conf = df["confidence_class"].astype(str).value_counts() if len(df) else {}
-    st.caption(f"Raw detections in selection: **{len(df):,}** · by FIRMS confidence")
-    st.markdown('<table class="dossier" style="width:100%;text-align:center"><tr>' + "".join(
-        f'<td style="padding:0"><span class="k">{_cls.upper()}</span><br>'
-        f'<span style="font-size:1.15rem;font-weight:650">{int(_conf.get(_cls, 0)):,}</span></td>'
-        for _cls in ["low", "nominal", "high"]) + "</tr></table>", unsafe_allow_html=True)
-    st.subheader("Export")
+    st.markdown(f"**{len(df):,}** raw detections in selection")
+    st.caption("FIRMS confidence: " + " · ".join(
+        f"{_cls} {int(_conf.get(_cls, 0)):,}" for _cls in ["low", "nominal", "high"]))
     st.download_button("Download CSV", data=lambda: to_csv_bytes(df), icon=":material/download:",
                        file_name=f"hotspots_{preset}_{mode}.csv", mime="text/csv", disabled=df.empty)
     with st.expander("Data provenance"):

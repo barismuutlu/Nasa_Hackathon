@@ -1,11 +1,11 @@
 [theme]
 base = "dark"
-# koyu tema: uydu altlığı + viridis (takvim ve ısı haritası) ile uyumlu; vurgu = viridis açık yeşil
-primaryColor = "#b5de2b"
-backgroundColor = "#0e1014"
-secondaryBackgroundColor = "#171a21"
-textColor = "#e8e6f0"
-borderColor = "#2b2f3a"
+# sıcak koyu gri zemin + yanık turuncu vurgu (uydu altlığı ve alev paletiyle uyumlu)
+primaryColor = "#d9742b"
+backgroundColor = "#1d1c1a"
+secondaryBackgroundColor = "#272522"
+textColor = "#ece7de"
+borderColor = "#3b3834"
 showSidebarBorder = true
 font = "sans-serif"
 headingFontWeights = [700, 650, 600, 600, 600, 600]
