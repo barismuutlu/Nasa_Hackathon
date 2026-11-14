@@ -1,7 +1,7 @@
 """Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4.
 
 P5 (app.py) parquet'i doğrudan okumaz; sadece bu modülü kullanır:
-    from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes
+    from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes, forecast
 
 Bu modül Streamlit'e bağımlı değildir (pipeline/ ve testlerden de kullanılabilir).
 Önbellekleme (st.cache_data) app.py'nin işidir; burada sadece dosya okuması önbellekli.
@@ -215,6 +215,63 @@ def to_csv_bytes(df: pd.DataFrame) -> bytes:
     """st.download_button için CSV (UTF-8, index'li tablolar için index korunur)."""
     keep_index = df.index.name is not None
     return df.to_csv(index=keep_index, lineterminator="\n").encode("utf-8")  # Windows'ta da \n
+
+
+# ---------------------------------------------------------------- deneysel 30 günlük görünüm (v1.5)
+
+FORECAST_PATH = ROOT / "data" / "deploy" / "forecast.parquet"     # pipeline/forecast.py (P4)
+FORECAST_METRICS = ROOT / "docs" / "forecast" / "metrics.json"
+FORECAST_RATIO = 1.5    # oran ≥ 1.5 → "above normal", ≤ 1/1.5 → "below normal", arası "near normal"
+
+
+@lru_cache(maxsize=2)
+def _load_forecast(path_str: str, mtime: float) -> tuple[pd.DataFrame, dict]:
+    import json
+    f = pd.read_parquet(path_str, engine="pyarrow")
+    if not FORECAST_METRICS.exists():
+        raise FileNotFoundError(f"{FORECAST_METRICS} yok — python pipeline/forecast.py")
+    return f, json.loads(FORECAST_METRICS.read_text(encoding="utf-8"))
+
+
+def forecast(geom) -> dict[str, Any] | None:
+    """Deneysel 30 günlük tespit görünümü (CONTRACT §7.5). Bölgede görünüm hücresi yoksa None.
+
+    Hücre seçimi: 1° hücre MERKEZİ bölgenin içindeyse. Sadece Arjantin; hotspot dosyasından bağımsız.
+    Bölge toplamı = (Σ expected_geo / Σ normal_geo) × Σ normal  (pipeline/forecast.py ile aynı hesap).
+    """
+    if not FORECAST_PATH.exists():
+        return None
+    f, meta = _load_forecast(str(FORECAST_PATH), FORECAST_PATH.stat().st_mtime)
+    (lon_min, lat_min, lon_max, lat_max), poly = _parse_geom(geom)
+    m = f["cell_lon"].between(lon_min, lon_max) & f["cell_lat"].between(lat_min, lat_max)
+    if poly is not None:
+        m &= shapely.contains_xy(poly, f["cell_lon"].to_numpy(), f["cell_lat"].to_numpy())
+    cells = f.loc[m].reset_index(drop=True)
+    if cells.empty:
+        return None
+    ratio = float(cells["expected_geo"].sum() / cells["normal_geo"].sum())
+    normal = float(cells["normal"].sum())
+    pred = ratio * normal
+    scope = "la_rioja" if len(cells) < meta["small_selection_cells"] else "argentina"
+    sc = meta["scopes"][scope]
+    if ratio >= FORECAST_RATIO:
+        label = "above normal"
+    elif ratio <= 1 / FORECAST_RATIO:
+        label = "below normal"
+    else:
+        label = "near normal"
+    cells = cells.assign(ratio=(cells["expected_geo"] + 1) / (cells["normal_geo"] + 1))  # harita için, yumuşatılmış
+    return {
+        "start": cells["start"].iloc[0], "end": cells["end"].iloc[0],
+        "data_through": cells["data_through"].iloc[0],
+        "pred": pred,
+        "p10": float(np.expm1(np.log1p(pred) + sc["err_log_p10"])),
+        "p90": float(np.expm1(np.log1p(pred) + sc["err_log_p90"])),
+        "normal": normal, "ratio": ratio, "label": label, "n_cells": len(cells),
+        "skill": meta["skill_vs_normal"], "direction_hit_rate": meta["direction_hit_rate"],
+        "backtest_years": tuple(meta["test_years"]),
+        "cells": cells,
+    }
 
 
 # ---------------------------------------------------------------- hızlı kontrol

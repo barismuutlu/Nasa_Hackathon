@@ -1,0 +1,51 @@
+{
+  "region": "argentina",
+  "cell_deg": 1.0,
+  "window_days": 30,
+  "gap_days": 2,
+  "data_through": "2026-11-12",
+  "start": "2026-11-15",
+  "end": "2026-12-14",
+  "inputs": [
+    "NASA FIRMS (harmonized)"
+  ],
+  "method": "log1p(target) = normal + a·cell deviation + b·regional deviation (LinearRegression); regional total = ratio to normal × 10-year arithmetic normal",
+  "small_selection_cells": 100,
+  "skill_vs_normal": 0.232,
+  "direction_hit_rate": 0.739,
+  "direction_n": 16710,
+  "yearly_skill": {
+    "2015": 0.27,
+    "2016": 0.223,
+    "2017": 0.264,
+    "2018": 0.215,
+    "2019": 0.182,
+    "2020": 0.294,
+    "2021": 0.117,
+    "2022": 0.226,
+    "2023": 0.242,
+    "2024": 0.201,
+    "2025": 0.277
+  },
+  "test_years": [
+    2015,
+    2025
+  ],
+  "n_origins": 132,
+  "scopes": {
+    "argentina": {
+      "total_bias_pct": -0.1,
+      "total_mae_log_model": 0.421,
+      "total_mae_log_normal": 0.517,
+      "err_log_p10": -0.651,
+      "err_log_p90": 0.638
+    },
+    "la_rioja": {
+      "total_bias_pct": -11.6,
+      "total_mae_log_model": 0.48,
+      "total_mae_log_normal": 0.503,
+      "err_log_p10": -0.764,
+      "err_log_p90": 0.628
+    }
+  }
+}

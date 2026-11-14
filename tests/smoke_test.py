@@ -241,6 +241,28 @@ def _():
     assert raw.split(b"\n")[0].decode() == ",".join(COLUMNS)
 
 
+@check("query.forecast (deneysel 30 günlük görünüm, §7.5)")
+def _():
+    if not query.FORECAST_PATH.exists():
+        return "ATLANDI — data/deploy/forecast.parquet yok (python pipeline/forecast.py)"
+    f = pd.read_parquet(query.FORECAST_PATH)
+    want = ["cell_lat", "cell_lon", "start", "end", "expected_geo", "normal_geo", "normal", "region", "data_through"]
+    assert list(f.columns) == want, list(f.columns)
+    v = f[["expected_geo", "normal_geo", "normal"]]
+    assert v.notna().all().all() and (v >= 0).all().all()
+    assert f["start"].nunique() == 1 and (f["end"] - f["start"]).iloc[0].days == 29, "tek 30 günlük pencere olmalı"
+    assert (f["start"] > f["data_through"]).all(), "hedef penceresi verinin sonundan sonra başlamalı"
+    lr = query.forecast("La Rioja (AR)")
+    assert lr is not None and lr["n_cells"] > 0 and lr["p10"] <= lr["pred"] <= lr["p90"]
+    assert lr["label"] in ("below normal", "near normal", "above normal"), lr["label"]
+    assert query.forecast("Hohes Venn") is None, "Aachen'de görünüm olmamalı"
+    lon0, lat0, lon1, lat1 = query.PRESETS["La Rioja (AR)"]
+    gj = {"type": "Polygon", "coordinates": [[[lon0, lat0], [lon1, lat0], [lon1, lat1], [lon0, lat1], [lon0, lat0]]]}
+    assert query.forecast(gj)["n_cells"] == lr["n_cells"], "GeoJSON ≠ bbox"
+    return (f"{lr['start']:%Y-%m-%d}→{lr['end']:%m-%d} La Rioja: {lr['pred']:.0f} ({lr['p10']:.0f}–{lr['p90']:.0f}) "
+            f"vs normal {lr['normal']:.0f} → {lr['label']}; test yön %{100 * lr['direction_hit_rate']:.0f}")
+
+
 # ---------------------------------------------------------------- rapor
 
 if __name__ == "__main__":
