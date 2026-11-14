@@ -424,6 +424,18 @@ def calendar_and_anomaly(df, mode, d0, d1):
     other = monthly_matrix(df, mode="harm" if mode == "raw" else "raw", start=s, end=e).dropna(how="all")
     shown = mat.astype(float).copy()
     z = shown.values
+    # selected cell, resolved BEFORE the figure is built so the clicked cell is outlined in the same run:
+    # the chart's click state is already in session_state["cal"] when the fragment reruns
+    pts_sel = (st.session_state.get("cal") or {}).get("selection", {}).get("points", [])
+    if pts_sel:
+        sel = (int(pts_sel[0]["y"]), MONTHS.index(pts_sel[0]["x"]) + 1)
+        if sel != st.session_state.get("_last_sel"):
+            st.session_state["_last_sel"] = sel
+            st.session_state["sel_year"], st.session_state["sel_month"] = sel
+    years = [int(y) for y in mat.index]
+    if st.session_state.get("sel_year") not in years:
+        st.session_state["sel_year"] = 2026 if 2026 in years else years[-1]
+    st.session_state.setdefault("sel_month", 8)
     scale = st.radio("Colour scale", ["Log", "Linear", "Anomaly (z)"], horizontal=True, key="scale",
                      help="Log keeps small events (Hohes Venn Apr 2011 = 17) visible next to large ones (1,899). "
                           "Anomaly: z-score of each cell against the same month in other years.")
@@ -477,24 +489,19 @@ def calendar_and_anomaly(df, mode, d0, d1):
                       dragmode=False, xaxis=dict(fixedrange=True),
                       yaxis=dict(range=[int(shown.index.max()) + 0.5, int(shown.index.min()) - 0.5], dtick=2,
                                  fixedrange=True))
-    ev = st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal",
+    # outline of the selected cell: dark line under a light one, readable on pale yellow and on dark red
+    _sy, _sm = st.session_state["sel_year"], st.session_state["sel_month"]
+    for _col, _w in (("#1d1c1a", 5), ("#ffffff", 2.5)):
+        fig.add_shape(type="rect", x0=_sm - 1.5, x1=_sm - 0.5, y0=_sy - 0.5, y1=_sy + 0.5,
+                      line=dict(color=_col, width=_w), fillcolor="rgba(0,0,0,0)", layer="above")
+    st.plotly_chart(fig, width="stretch", on_select="rerun", selection_mode="points", key="cal",
                          config={"doubleClick": False, "displayModeBar": False, "scrollZoom": False})
     figcap(2, f"Monthly {'raw detections' if mode == 'raw' else 'harmonized (MODIS-equivalent) estimate'}.",
-           f"{scale} colour scale. Grey = no data. • = partial month. Click a cell to inspect it.")
-    pts_sel = (ev or {}).get("selection", {}).get("points", []) if ev else []
-    if pts_sel:
-        sel = (int(pts_sel[0]["y"]), MONTHS.index(pts_sel[0]["x"]) + 1)
-        if sel != st.session_state.get("_last_sel"):
-            st.session_state["_last_sel"] = sel
-            st.session_state["sel_year"], st.session_state["sel_month"] = sel
+           f"{scale} colour scale. Grey = no data. • = partial month. Click a cell to inspect it; the outlined cell is the selected one.")
 
     # ---- selected cell record ----
     st.subheader("Selected cell")
     c1, c2, _ = st.columns([1, 1, 2])
-    years = [int(y) for y in mat.index]
-    if st.session_state.get("sel_year") not in years:
-        st.session_state["sel_year"] = 2026 if 2026 in years else years[-1]
-    st.session_state.setdefault("sel_month", 8)
     yr = c1.selectbox("Year", years, key="sel_year")
     mo = c2.selectbox("Month", list(range(1, 13)), format_func=lambda i: MONTHS[i - 1], key="sel_month")
     a = anomaly(mat, yr, mo)
