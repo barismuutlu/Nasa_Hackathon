@@ -42,7 +42,7 @@ Ortak dosyalara (`requirements.txt` vb.) paket eklemek gerekirse → Barış'a s
 
 **Ek yetki (P4 onayı, 14 Kas):** P2 Bahtiyar: freeze'e kadar `app/` ve `docs/pitch/`'e sadece `p2/*` branch'i ile
 katkı; merge dosya sahibinde (Yusuf / İbrahim). `app/app.py`'ye başlamadan önce Yusuf'a hangi bölüm olduğunu yazar.
-P3 Oğuzhan ekipten ayrıldı (14 Kas); `pipeline/validate.py` ve `docs/validation/` donduruldu, sorular → Bahtiyar.
+P3 Oğuzhan 14 Kas akşamı erken ayrıldı, 15 Kas'ta tekrar ekipte; `pipeline/validate.py` ve `docs/validation/` P3'te.
 
 ## 3. Veri sözleşmesi (KİLİTLİ — değişiklik sadece P4 onayıyla; sürüm: `docs/CONTRACT.md` başlığı)
 Tam şema, tekrar kuralları, bölge adları, pipeline girdi/çıktıları ve `query.py` API'si:
