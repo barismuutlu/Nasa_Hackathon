@@ -72,12 +72,16 @@ JSON_SPLITS = set(SPLITS) | {TRANSFER_SPLIT[0]}
 SCALES = {"0.25deg": 0.25, "1deg": 1.0}
 # report regions → CONTRACT §5 region values (must match contract.REGIONS)
 REPORT_REGIONS = {"argentina": ["argentina"], "aachen_eifel": ["aachen_eifel"]}
-REGION_LABEL = {"argentina": "Arjantin (eğitim bölgesi)", "aachen_eifel": "Aachen/Eifel (transfer)"}
+REGION_LABEL = {"argentina": "Argentina (training region)", "aachen_eifel": "Aachen/Eifel (transfer)"}
 VENN_BOX = (5.95, 50.45, 6.25, 50.60)   # lon_min, lat_min, lon_max, lat_max
 VENN_MONTHS = [(2011, 4), (2026, 8)]
 VIIRS_LABEL = {"SNPP": "S-NPP", "NOAA20": "NOAA-20", "NOAA21": "NOAA-21"}
-MONTH_TR = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül",
-            "Ekim", "Kasım", "Aralık"]
+MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September",
+               "October", "November", "December"]
+MONTH_ABBR = [m[:3] for m in MONTH_NAMES]
+# query.anomaly() returns Turkish label values (P4 API) → English for our outputs
+LABEL_EN = {"çok yüksek": "very high", "yüksek": "high", "normal": "normal", "düşük": "low",
+            "tespit yok": "no detections", "veri yok": "no data"}
 VISIBLE_RATIO = 3.0   # "visible" = that month's value is ≥ 3 times the mean of the same month in the other years
 
 NEED_COLS = ["latitude", "longitude", "year", "month", "instrument", "satellite",
@@ -94,12 +98,12 @@ def pick_input() -> Path:
     env = os.environ.get("P3_INPUT")
     if env:
         if not Path(env).exists():
-            raise FileNotFoundError(f"P3_INPUT bulunamadı: {env}")
+            raise FileNotFoundError(f"P3_INPUT not found: {env}")
         return Path(env).resolve()
     for p in (HARM_PATH, RAW_PATH, MOCK_PATH):
         if p.exists():
             return p
-    raise FileNotFoundError(f"Girdi yok: {HARM_PATH}, {RAW_PATH}, {MOCK_PATH}")
+    raise FileNotFoundError(f"No input: {HARM_PATH}, {RAW_PATH}, {MOCK_PATH}")
 
 
 def load_input(path: Path) -> pd.DataFrame:
@@ -107,22 +111,22 @@ def load_input(path: Path) -> pd.DataFrame:
     cols = pq.read_schema(path).names
     missing = [c for c in NEED_COLS if c not in cols]
     if missing:
-        raise ValueError(f"{path}: eksik sütun {missing} (CONTRACT §1)")
+        raise ValueError(f"{path}: missing columns {missing} (CONTRACT §1)")
     df = pd.read_parquet(path, columns=NEED_COLS)
     n_nan = int(df["weight_harm"].isna().sum())
     if 0 < n_nan < len(df):
-        raise ValueError(f"{path}: weight_harm kısmen NaN ({n_nan:,}/{len(df):,}) — "
-                         "ya tamamen NaN (P1) ya hiç NaN yok (P2) olmalı (CONTRACT §6)")
+        raise ValueError(f"{path}: weight_harm partly NaN ({n_nan:,}/{len(df):,}) — "
+                         "must be either all NaN (P1) or no NaN at all (P2) (CONTRACT §6)")
     if (df["weight_harm"] < 0).any():
-        raise ValueError(f"{path}: weight_harm < 0 değerler var")
+        raise ValueError(f"{path}: weight_harm has values < 0")
     bad = set(df["instrument"].astype(str)) - {"MODIS", "VIIRS"}
     if bad:
-        raise ValueError(f"beklenmeyen instrument: {bad}")
+        raise ValueError(f"unexpected instrument: {bad}")
     have = set(df["region"].astype(str).unique())
     need = {r for regs in REPORT_REGIONS.values() for r in regs}
     if need - have:
-        raise ValueError(f"{path}: rapor bölgeleri veride yok: {sorted(need - have)} "
-                         f"(veride: {sorted(have)}) — CONTRACT §5")
+        raise ValueError(f"{path}: report regions missing from data: {sorted(need - have)} "
+                         f"(in data: {sorted(have)}) — CONTRACT §5")
     return df
 
 
@@ -186,22 +190,22 @@ def compute_metrics(df: pd.DataFrame, has_harm: bool) -> tuple[list[dict], dict[
 def crosscheck_grid(tab025: pd.DataFrame) -> str:
     """Does our own count match P2 monthly_grid.n_modis? (only if present)"""
     if not GRID_PATH.exists():
-        return "monthly_grid.parquet yok — çapraz kontrol atlandı"
+        return "monthly_grid.parquet missing — cross-check skipped"
     g = pd.read_parquet(GRID_PATH, columns=["year", "n_modis", "n_viirs"])
     mine = tab025.groupby("year")[["true", "raw_viirs"]].sum()
     theirs = g.groupby("year")[["n_modis", "n_viirs"]].sum()
     j = mine.join(theirs, how="outer").fillna(0)
     bad = j[(j.true != j.n_modis) | (j.raw_viirs != j.n_viirs)]
     if len(bad):
-        raise ValueError(f"monthly_grid ile hotspots_harm yıllık sayıları tutmuyor:\n{bad}")
-    return "monthly_grid.parquet yıllık n_modis/n_viirs ile tutarlı ✓"
+        raise ValueError(f"monthly_grid and hotspots_harm annual counts do not match:\n{bad}")
+    return "monthly_grid.parquet consistent with annual n_modis/n_viirs ✓"
 
 
 # ---------------------------------------------------------------- plots
 
 def watermark(fig, is_mock: bool) -> None:
     if is_mock:
-        fig.text(0.5, 0.5, "SENTETİK TEST VERİSİ", ha="center", va="center", rotation=25,
+        fig.text(0.5, 0.5, "SYNTHETIC TEST DATA", ha="center", va="center", rotation=25,
                  fontsize=44, color="red", alpha=0.18, weight="bold")
 
 
@@ -227,9 +231,9 @@ def plot_pred_vs_true(tables: dict[str, pd.DataFrame], rows: list[dict], is_mock
                 hi = max(hi, s.true.max() + 1, s[col].max() + 1)
         ax.plot([1, hi * 1.3], [1, hi * 1.3], "k--", lw=1.2, label="1:1")
         ax.set(xscale="log", yscale="log", xlim=(0.8, hi * 1.3), ylim=(0.8, hi * 1.3),
-               xlabel="Gerçek: MODIS tespit sayısı (+1)",
-               ylabel=("Tahmin: harmonize VIIRS Σ weight_harm (+1)" if has_harm
-                       else "Ham VIIRS tespit sayısı (+1) — harmonize YOK"),
+               xlabel="Truth: MODIS detection count (+1)",
+               ylabel=("Prediction: harmonized VIIRS Σ weight_harm (+1)" if has_harm
+                       else "Raw VIIRS detection count (+1) — NOT harmonized"),
                title=f"{REGION_LABEL[rname]} — {years.start}–{years.stop - 1}")
         for axis in (ax.xaxis, ax.yaxis):
             axis.set_major_locator(matplotlib.ticker.LogLocator(subs=(1, 2, 5) if hi < 300 else (1,)))
@@ -237,7 +241,7 @@ def plot_pred_vs_true(tables: dict[str, pd.DataFrame], rows: list[dict], is_mock
             axis.set_minor_formatter(matplotlib.ticker.NullFormatter())
         ax.legend(loc="lower right", fontsize=11, framealpha=0.9)   # upper left: large events are there
         ax.grid(alpha=0.3, which="both")
-    fig.suptitle("Hücre-ay bazında tahmin vs gerçek (MODIS-eşdeğeri tespit sayısı)", fontsize=17)
+    fig.suptitle("Prediction vs truth per cell-month (MODIS-equivalent detection count)", fontsize=17)
     watermark(fig, is_mock)
     fig.tight_layout()
     fig.savefig(OUT / "pred_vs_true.png")
@@ -248,13 +252,13 @@ def plot_annual(df: pd.DataFrame, is_mock: bool, has_harm: bool) -> pd.DataFrame
     a = df[df.region.astype(str) == "argentina"]
     is_modis = a["instrument"].astype(str).eq("MODIS")
     yearly = pd.DataFrame({
-        "ham (tüm uydular)": a.groupby("year").size(),
-        "sadece MODIS (Terra+Aqua)": a[is_modis].groupby("year").size(),
-        "harmonize (Σ weight_harm)": a.groupby("year")["weight_harm"].sum(),
+        "raw (all satellites)": a.groupby("year").size(),
+        "MODIS only (Terra+Aqua)": a[is_modis].groupby("year").size(),
+        "harmonized (Σ weight_harm)": a.groupby("year")["weight_harm"].sum(),
     }).fillna(0).sort_index()
     yearly.index = yearly.index.astype(int)
     if not has_harm:   # P1 data: harmonized line is not drawn
-        yearly = yearly.drop(columns="harmonize (Σ weight_harm)")
+        yearly = yearly.drop(columns="harmonized (Σ weight_harm)")
 
     fig, ax = plt.subplots(figsize=(13, 6.5))
     styles = [dict(lw=2.5, ls="-", marker="o", ms=6), dict(lw=6, ls="-", marker="o", ms=9, alpha=0.6),
@@ -262,7 +266,7 @@ def plot_annual(df: pd.DataFrame, is_mock: bool, has_harm: bool) -> pd.DataFrame
     for i, col in enumerate(yearly.columns):
         ax.plot(yearly.index, yearly[col], color=CMAP([0.05, 0.45, 0.85][i]), label=col, **styles[i])
     ax.axvspan(TEST_YEARS.start - 0.5, TEST_YEARS.stop - 0.5, color="grey", alpha=0.15,
-               label="test yılları (2022–2024)")
+               label="test years (2022–2024)")
     top = yearly.to_numpy().max()
     # satellite start dates FROM THE DATA (not hard-coded; CONTRACT §3)
     first = df[df.instrument.astype(str) == "VIIRS"].groupby("satellite", observed=True)["year"].min()
@@ -271,10 +275,10 @@ def plot_annual(df: pd.DataFrame, is_mock: bool, has_harm: bool) -> pd.DataFrame
         ax.axvline(y0, color="k", ls=":", lw=1)
         ax.text(y0 + 0.1, top * 0.97, f"{VIIRS_LABEL.get(str(sat), sat)}\n{y0}", fontsize=11, va="top")
     last = yearly.index.max()
-    ax.text(last, 0, "kısmi yıl", fontsize=10, ha="center", va="bottom")
-    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}".replace(",", ".")))
-    ax.set(xlabel="Yıl", ylabel="Tespit sayısı / yıl", ylim=(0, top * 1.05),
-           title="Arjantin — yıllık tespit: ham vs harmonize vs MODIS")
+    ax.text(last, 0, "partial year", fontsize=10, ha="center", va="bottom")
+    ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.set(xlabel="Year", ylabel="Detections / year", ylim=(0, top * 1.05),
+           title="Argentina — annual detections: raw vs harmonized vs MODIS")
     ax.legend(loc="center left", fontsize=11)
     ax.grid(alpha=0.3)
     watermark(fig, is_mock)
@@ -329,8 +333,8 @@ def venn_check(df: pd.DataFrame, is_mock: bool, has_harm: bool,
     panels = ["raw", "harm" if has_harm else "modis"]
     fig, axes = plt.subplots(1, 2, figsize=(18, 9), sharey=True)
     vmax = max(float(np.nanmax(np.log1p(mats[p].to_numpy()))) for p in panels)   # shared color scale
-    titles = {"raw": "Ham (tüm uydular)", "harm": "Harmonize (MODIS-eşdeğeri)",
-              "modis": "Sadece MODIS (Terra+Aqua)"}
+    titles = {"raw": "Raw (all satellites)", "harm": "Harmonized (MODIS-equivalent)",
+              "modis": "MODIS only (Terra+Aqua)"}
     for ax, mode in zip(axes, panels):
         mat = mats[mode]
         im = ax.imshow(np.log1p(mat.to_numpy()), aspect="auto", cmap="viridis", vmin=0, vmax=vmax,
@@ -341,51 +345,55 @@ def venn_check(df: pd.DataFrame, is_mock: bool, has_harm: bool,
                                            ec="red", lw=2.5))
                 r = next(r for r in results if r["mode"] == mode and r["year"] == y
                          and r["month"] == m)
-                ax.annotate(f"{MONTH_TR[m - 1]} {y}: {r['value']:.0f}\n{short_rank(r)}", (m, y),
+                ax.annotate(f"{MONTH_NAMES[m - 1]} {y}: {r['value']:,.0f}\n{short_rank(r)}", (m, y),
                             xytext=(m - 5.5 if m > 6 else m + 0.8,
                                     y - 2.5 if y >= mat.index.max() - 1 else y), fontsize=12,
                             color="red", weight="bold", va="center",
                             arrowprops={"arrowstyle": "-", "color": "red"})
-        ax.set_xticks(range(1, 13), query.MONTH_LABELS, fontsize=12)
+        ax.set_xticks(range(1, 13), MONTH_ABBR, fontsize=12)
         ax.set_title(titles[mode])
-        ax.set_xlabel("Ay")
-    axes[0].set_ylabel("Yıl")
-    fig.colorbar(im, ax=axes, label="log(1 + tespit sayısı) — iki panelde aynı ölçek", shrink=0.8)
-    fig.suptitle("Hohes Venn (lon 5.95–6.25, lat 50.45–50.60) — aylık tespit takvimi", fontsize=17)
+        ax.set_xlabel("Month")
+    axes[0].set_ylabel("Year")
+    fig.colorbar(im, ax=axes, label="log(1 + detection count) — same scale in both panels", shrink=0.8)
+    fig.suptitle("Hohes Venn (lon 5.95–6.25, lat 50.45–50.60) — monthly detection calendar", fontsize=17)
     if burn is not None:
         parts = []
         for g, (y, m) in BURN_GROUPS.items():
             for inst, r in burn.loc[g].iterrows() if g in burn.index.get_level_values(0) else []:
-                parts.append(f"{MONTH_TR[m - 1]} {y} {inst}: {r.burned_match}/{r.toplam}")
-        fig.text(0.42, 0.005, "MCD64A1 yanmış alan pikseline düşen tespitler (3×3 px, ±16 gün; destekleyici, "
-                 "bağımsız doğrulama değil): " + " · ".join(parts), ha="center", va="top", fontsize=12)
+                parts.append(f"{MONTH_NAMES[m - 1]} {y} {inst}: {r.burned_match:,}/{r.total:,}")
+        fig.text(0.42, 0.005, "Detections on MCD64A1 burned-area pixels (3×3 px, ±16 days; supporting evidence, "
+                 "not independent validation): " + " · ".join(parts), ha="center", va="top", fontsize=12)
     watermark(fig, is_mock)
     fig.savefig(OUT / "venn_check.png", bbox_inches="tight")
     plt.close(fig)
     return results
 
 
+def ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
 def short_rank(r: dict) -> str:
-    """Plot label: '26 yılın 1.si, ort. ×12' (1st of 26 years, mean ×12)."""
+    """Plot label: '1st of 26 years, other years max 3'."""
     if r["rank"] is None:
-        return r["label"]
-    tail = ("diğer yıllarda tespit yok" if r["mean"] == 0
-            else f"diğer yıllar en fazla {r['max_other']:.0f}")
-    return f"{r['n_years']} yılın {r['rank']}.si, {tail}"
+        return LABEL_EN.get(r["label"], r["label"])
+    tail = ("no detections in other years" if r["mean"] == 0
+            else f"other years max {r['max_other']:.0f}")
+    return f"{ordinal(r['rank'])} of {r['n_years']} years, {tail}"
 
 
 def venn_text(y: int, m: int, a: dict, ratio: float, mode: str = "raw") -> str:
-    """'26 yılın en yüksek Nisanı, ortalamanın 12 katı' (highest April of 26 years, 12 times the mean)
-    — instead of z (z is meaningless when the baseline is ~0)."""
+    """'highest April of 26 years, 12 times the mean' — instead of z (z is meaningless when the baseline is ~0)."""
+    month = MONTH_NAMES[m - 1]
     if a["rank"] is None:
-        return f"{MONTH_TR[m - 1]} {y}: {a['label']}"
-    ay = MONTH_TR[m - 1]
-    sira = "en yüksek" if a["rank"] == 1 else f"{a['rank']}. en yüksek"
-    base = (f"diğer yılların hiçbirinde bu ayda tespit yok" if a["mean"] == 0
-            else f"aynı ayın diğer yıllardaki ortalamasının (≈{a['mean']:.1f}) "
-                 f"{format(ratio, ',.0f').replace(',', '.')} katı, diğer yılların en fazlası {a['max_other']:.0f}")
-    unit = {"harm": "MODIS-eşdeğeri tespit", "modis": "MODIS tespiti"}.get(mode, "tespit")
-    return f"{a['value']:.0f} {unit} — {a['n_years']} yılın {sira} {ay} ayı; {base}"
+        return f"{month} {y}: {LABEL_EN.get(a['label'], a['label'])}"
+    order = "highest" if a["rank"] == 1 else f"{ordinal(a['rank'])} highest"
+    base = ("no detections in this month in any other year" if a["mean"] == 0
+            else f"{ratio:,.0f} times the mean of the same month in other years (≈{a['mean']:.1f}), "
+                 f"other years max {a['max_other']:.0f}")
+    unit = {"harm": "MODIS-equivalent detections", "modis": "MODIS detections"}.get(mode, "detections")
+    return f"{a['value']:,.0f} {unit} — {order} {month} of {a['n_years']} years; {base}"
 
 
 def test_year_breakdown(df: pd.DataFrame, has_harm: bool) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -400,7 +408,7 @@ def test_year_breakdown(df: pd.DataFrame, has_harm: bool) -> tuple[pd.DataFrame,
     })
     if not has_harm:
         yearly["harm"] = np.nan
-    yearly["oran"] = yearly.harm / yearly.modis.where(yearly.modis > 0)
+    yearly["ratio"] = yearly.harm / yearly.modis.where(yearly.modis > 0)
     a = t[(t.region.astype(str) == "argentina") & (t.year == 2022)]
     am = a["instrument"].astype(str).eq("MODIS")
     sat = a.groupby(["month", "satellite"], observed=True).size().unstack(fill_value=0)
@@ -410,7 +418,7 @@ def test_year_breakdown(df: pd.DataFrame, has_harm: bool) -> tuple[pd.DataFrame,
     }).join(sat, how="left").reindex(range(1, 13)).fillna(0)
     if not has_harm:
         monthly["harm"] = np.nan
-    monthly["oran"] = monthly.harm / monthly.modis.where(monthly.modis > 0)
+    monthly["ratio"] = monthly.harm / monthly.modis.where(monthly.modis > 0)
     return yearly, monthly
 
 
@@ -437,14 +445,14 @@ def burn_support() -> pd.DataFrame | None:
     b = pd.read_csv(BURN_PATH, usecols=["group", "instrument", "status"])
     bad = set(b.status) - BURN_STATUSES
     if bad:
-        raise ValueError(f"{BURN_PATH}: beklenmeyen status {sorted(bad)}")
+        raise ValueError(f"{BURN_PATH}: unexpected status {sorted(bad)}")
     badg = set(b.group) - set(BURN_GROUPS)
     if badg:
-        raise ValueError(f"{BURN_PATH}: beklenmeyen group {sorted(badg)}")
+        raise ValueError(f"{BURN_PATH}: unexpected group {sorted(badg)}")
     t = b.groupby(["group", "instrument"]).status.value_counts().unstack(fill_value=0) \
          .reindex(columns=sorted(BURN_STATUSES), fill_value=0)
-    t["toplam"] = t[sorted(BURN_STATUSES)].sum(axis=1)
-    t["bilinen"] = t.toplam - t.unknown - t.no_data   # "unknown" ≠ "unburned"
+    t["total"] = t[sorted(BURN_STATUSES)].sum(axis=1)
+    t["known"] = t.total - t.unknown - t.no_data   # "unknown" ≠ "unburned"
     return t
 
 
@@ -462,7 +470,7 @@ def ratio_diagnostics(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     c["viirs1"] = v.sum(axis=1) / (v > 0).sum(axis=1).replace(0, np.nan)
     c["modis"] = c.Terra + c.Aqua
     y = c.groupby(level=0)[["Terra", "Aqua", "modis", "viirs1"]].sum()
-    y["oran"] = y.modis / y.viirs1
+    y["ratio"] = y.modis / y.viirs1
     y["aqua_terra"] = y.Aqua / y.Terra
     r = (c.modis / c.viirs1).unstack(level=1)
     m2022 = (r.loc[2022] / r.loc[TRAIN_YEARS.start:TRAIN_YEARS.stop - 1].median()) \
@@ -489,67 +497,67 @@ def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown,
     has_harm = any(r["method"] == "harm" for r in rows)
     lines = []
     if not has_harm:
-        lines += ["> ℹ️ Harmonize veri (P2) yok — sadece ham sayımlar. harm metrikleri ve "
-                  "sunum cümleleri P2 çıktısı gelince üretilir.", ""]
+        lines += ["> ℹ️ No harmonized data (P2) — raw counts only. harm metrics and presentation "
+                  "sentences are produced once the P2 output is available.", ""]
     if is_mock:
-        lines += ["> ⚠️ **SENTETİK TEST VERİSİ** — bu sayıların bilimsel değeri yoktur, "
-                  "sadece pipeline testi.", ""]
-    lines += [f"# Doğrulama özeti", "", f"Girdi: `{rel(input_path)}`  ",
+        lines += ["> ⚠️ **SYNTHETIC TEST DATA** — these numbers have no scientific value, "
+                  "pipeline test only.", ""]
+    lines += ["# Validation summary", "", f"Input: `{rel(input_path)}`  ",
               f"{grid_note}  ", f"{k_note}", "",
-              "## Test (hücre-ay, harmonize vs ham VIIRS)", "",
-              "test = 2022–2024; test_2022 = NOAA-21 öncesi; test_2023-2024 = NOAA-21 aktif "
-              "(eğitimde olmayan uydu); transfer_2012-2026 = Aachen/Eifel'in tüm VIIRS yılları "
-              "(bölge eğitime hiç girmedi).", "",
-              "| bölge | dönem | ölçek | yöntem | R² | bias (tespit/hücre-ay) | bias % | n |",
+              "## Test (cell-month, harmonized vs raw VIIRS)", "",
+              "test = 2022–2024; test_2022 = before NOAA-21; test_2023-2024 = NOAA-21 active "
+              "(satellite not in training); transfer_2012-2026 = all VIIRS years of Aachen/Eifel "
+              "(the region never entered training).", "",
+              "| region | period | scale | method | R² | bias (detections/cell-month) | bias % | n |",
               "|---|---|---|---|---|---|---|---|"]
     for r in sorted((r for r in rows if r["split"] != "train"),
                     key=lambda r: (r["region"], r["split"], r["scale"], r["method"])):
         lines.append(f"| {r['region']} | {r['split']} | {r['scale']} | {r['method']} | {fmt(r['r2'])} | "
                          f"{fmt(r['bias'])} | {fmt(r['bias_pct'], '+.1f')} | {r['n']} |")
     yearly, monthly = breakdown
-    lines += ["", "## Test yılları tek tek (Σ harmonize VIIRS / Σ MODIS; 1.00 = mükemmel)", "",
-              "| bölge | yıl | Σ MODIS | Σ harm | oran |", "|---|---|---|---|---|"]
+    lines += ["", "## Test years one by one (Σ harmonized VIIRS / Σ MODIS; 1.00 = perfect)", "",
+              "| region | year | Σ MODIS | Σ harm | ratio |", "|---|---|---|---|---|"]
     for (reg, yr), r in yearly.iterrows():
-        lines.append(f"| {reg} | {yr} | {r.modis:.0f} | {fmt(r.harm, '.1f')} | {fmt(r.oran)} |")
-    sat_cols = [c for c in monthly.columns if c not in ("modis", "harm", "oran")]
-    lines += ["", "### Arjantin 2022 aylık (S-NPP Tem–Ağu, Aqua Mar–Nis kesintileri)", "",
-              "| ay | Σ MODIS | Σ harm | oran | " + " | ".join(map(str, sat_cols)) + " |",
+        lines.append(f"| {reg} | {yr} | {r.modis:.0f} | {fmt(r.harm, '.1f')} | {fmt(r.ratio)} |")
+    sat_cols = [c for c in monthly.columns if c not in ("modis", "harm", "ratio")]
+    lines += ["", "### Argentina 2022 monthly (S-NPP Jul–Aug, Aqua Mar–Apr outages)", "",
+              "| month | Σ MODIS | Σ harm | ratio | " + " | ".join(map(str, sat_cols)) + " |",
               "|---|---|---|---|" + "---|" * len(sat_cols)]
     for mth, r in monthly.iterrows():
-        lines.append(f"| {MONTH_TR[mth - 1]} | {r.modis:.0f} | {fmt(r.harm, '.1f')} | {fmt(r.oran)} | "
+        lines.append(f"| {MONTH_NAMES[mth - 1]} | {r.modis:.0f} | {fmt(r.harm, '.1f')} | {fmt(r.ratio)} | "
                      + " | ".join(f"{r[c]:.0f}" for c in sat_cols) + " |")
     yr, m22 = diag
-    tr = yr.loc[TRAIN_YEARS.start:TRAIN_YEARS.stop - 1, "oran"]
-    lines += ["", "## 2022 sapması — ham veriden tanı (Arjantin)", "",
-              "oran = MODIS / (aktif VIIRS uydusu başına VIIRS). Harmonizasyondan bağımsız. "
-              f"Eğitim yılları aralığı {tr.min():.3f}–{tr.max():.3f} (medyan {tr.median():.3f}).", "",
-              "| yıl | MODIS | VIIRS/uydu | oran | oran / eğitim medyanı | Aqua/Terra |",
+    tr = yr.loc[TRAIN_YEARS.start:TRAIN_YEARS.stop - 1, "ratio"]
+    lines += ["", "## 2022 deviation — diagnosis from raw data (Argentina)", "",
+              "ratio = MODIS / (VIIRS per active VIIRS satellite). Independent of harmonization. "
+              f"Training-year range {tr.min():.3f}–{tr.max():.3f} (median {tr.median():.3f}).", "",
+              "| year | MODIS | VIIRS/satellite | ratio | ratio / training median | Aqua/Terra |",
               "|---|---|---|---|---|---|"]
     for yy, r in yr.iterrows():
         lines.append(f"| {yy}{' (test)' if yy in TEST_YEARS else ''} | {r.modis:.0f} | {r.viirs1:.0f} | "
-                     f"{r.oran:.3f} | {r.oran / tr.median():.2f} | {r.aqua_terra:.2f} |")
+                     f"{r.ratio:.3f} | {r.ratio / tr.median():.2f} | {r.aqua_terra:.2f} |")
     if len(m22):
-        lines += ["", "2022 aylık oran / aynı ayın eğitim medyanı (< 1 → MODIS beklenenden az): "
-                  + ", ".join(f"{MONTH_TR[k - 1][:3]} {v:.2f}" for k, v in m22.items())]
-    lines += ["", "## Hohes Venn (kutu lon 5.95–6.25, lat 50.45–50.60)", "",
-              f"'Görünüyor' = değer > 0 ve aynı ayın diğer yıllar ortalamasının ≥ {VISIBLE_RATIO:.0f} katı.", "",
-              "| seri | ay | sonuç | görünüyor |", "|---|---|---|---|"]
+        lines += ["", "2022 monthly ratio / training median of the same month (< 1 → fewer MODIS than expected): "
+                  + ", ".join(f"{MONTH_ABBR[k - 1]} {v:.2f}" for k, v in m22.items())]
+    lines += ["", "## Hohes Venn (box lon 5.95–6.25, lat 50.45–50.60)", "",
+              f"'Visible' = value > 0 and ≥ {VISIBLE_RATIO:.0f} times the mean of the same month in the other years.", "",
+              "| series | month | result | visible |", "|---|---|---|---|"]
     for v in venn:
         lines.append(f"| {v['mode']} | {v['year']}-{v['month']:02d} | {v['text']} | "
-                     f"{'evet' if v['visible'] else 'hayır'} |")
+                     f"{'yes' if v['visible'] else 'no'} |")
     if burn is not None:
-        lines += ["", "### Destekleyici kanıt: MCD64A1 yanmış alan (P1, `data/burned_area_check.csv`)", "",
-                  "Tespit, MCD64A1'in (aylık yanmış alan, ~500 m) ±16 gün içinde yanmış işaretlediği bir "
-                  "piksele (3×3 komşuluk ≈ 1,4 km) düşüyor mu? **Bağımsız doğrulama değildir**: MCD64A1 "
-                  "algoritması MODIS aktif yangın verisini de kullanır ve küçük yanıkları kaçırabilir. "
-                  "'bilinmiyor' (unknown/no_data) ≠ 'yanmamış'.", "",
-                  "| olay | enstrüman | eşleşti | yanmamış | başka zamanda yanık | bilinmiyor | toplam |",
+        lines += ["", "### Supporting evidence: MCD64A1 burned area (P1, `data/burned_area_check.csv`)", "",
+                  "Does the detection fall on a pixel (3×3 neighbourhood ≈ 1.4 km) that MCD64A1 (monthly burned "
+                  "area, ~500 m) marks as burned within ±16 days? **Not an independent validation**: the MCD64A1 "
+                  "algorithm also uses MODIS active fire data and can miss small burns. "
+                  "'unknown' (unknown/no_data) ≠ 'unburned'.", "",
+                  "| event | instrument | matched | unburned | burned at another time | unknown | total |",
                   "|---|---|---|---|---|---|---|"]
         for (g, inst), r in burn.iterrows():
             y, m = BURN_GROUPS[g]
-            lines.append(f"| {MONTH_TR[m - 1]} {y} | {inst} | {r.burned_match} "
-                         f"({r.burned_match / r.toplam:.0%}) | {r.unburned} | {r.burned_other_time} | "
-                         f"{r.unknown + r.no_data} | {r.toplam} |")
+            lines.append(f"| {MONTH_NAMES[m - 1]} {y} | {inst} | {r.burned_match} "
+                         f"({r.burned_match / r.total:.0%}) | {r.unburned} | {r.burned_other_time} | "
+                         f"{r.unknown + r.no_data} | {r.total} |")
 
     if not has_harm:
         text = "\n".join(lines) + "\n"
@@ -559,54 +567,56 @@ def write_summary(rows, venn, is_mock, input_path, grid_note, k_note, breakdown,
     ar22, ar23 = get("harm", "argentina", split="test_2022"), get("harm", "argentina", split="test_2023-2024")
     vh = {(v["year"], v["month"]): v for v in venn if v["mode"] == "harm"}
     venn_ok = all(v["visible"] for v in vh.values())
-    lines += ["", "## Sunum için 3 cümle (P6)", "",
-              f"1. Arjantin'de (eğitim bölgesi), eğitimde kullanılmayan 2022–2024 yıllarında harmonize "
-              f"VIIRS tahmini MODIS tespit sayısını 1° hücre-ay ölçeğinde R²={fmt(ar['r2'])} ile, "
-              f"toplamda {fmt(ar['bias_pct'], '+.1f')}% sapmayla tahmin ediyor.",
-              f"   Eğitimde hiç olmayan NOAA-21'in de aktif olduğu 2023–2024'te: "
-              f"R²={fmt(ar23['r2'])}, toplam sapma {fmt(ar23['bias_pct'], '+.1f')}% "
-              f"(2022, NOAA-21 öncesi: R²={fmt(ar22['r2'])}, {fmt(ar22['bias_pct'], '+.1f')}%).",
-              f"2. Aynı katsayılar Aachen/Eifel'e (transfer, 2012–2026) taşındığında R²={fmt(gb['r2'])}, "
-              f"toplam sapma {fmt(gb['bias_pct'], '+.1f')}% (n={gb['n']} hücre-ay)"
-              + (f"; bu R² büyük ölçüde tek olaydan (Ağustos 2026): o ay hariç R²={fmt(tr_ev['1deg'][1]['r2'])}, "
-                 f"sapma {fmt(tr_ev['1deg'][1]['bias_pct'], '+.1f')}%." if tr_ev and "1deg" in tr_ev else "."),
-              f"3. Hohes Venn'de bilinen yangın olaylarıyla örtüşen tespit artışı "
-              + ("Nisan 2011 ve Ağustos 2026'da harmonize takvimde görünüyor"
-                 if venn_ok else "harmonize takvimde her iki ayda da belirgin DEĞİL")
-              + ": " + "; ".join(f"{MONTH_TR[m - 1]} {y} → {v['text']}"
+    lines += ["", "## 3 sentences for the presentation (P6)", "",
+              f"1. In Argentina (training region), for the years 2022–2024 not used in training, the harmonized "
+              f"VIIRS estimate predicts the MODIS detection count at 1° cell-month scale with R²={fmt(ar['r2'])} "
+              f"and a total bias of {fmt(ar['bias_pct'], '+.1f')}%.",
+              f"   In 2023–2024, when NOAA-21 (never seen in training) is also active: "
+              f"R²={fmt(ar23['r2'])}, total bias {fmt(ar23['bias_pct'], '+.1f')}% "
+              f"(2022, before NOAA-21: R²={fmt(ar22['r2'])}, {fmt(ar22['bias_pct'], '+.1f')}%).",
+              f"2. Transferred unchanged to Aachen/Eifel (2012–2026), the same coefficients give R²={fmt(gb['r2'])}, "
+              f"total bias {fmt(gb['bias_pct'], '+.1f')}% (n={gb['n']} cell-months)"
+              + (f"; this R² comes largely from a single event (August 2026): excluding that month "
+                 f"R²={fmt(tr_ev['1deg'][1]['r2'])}, bias {fmt(tr_ev['1deg'][1]['bias_pct'], '+.1f')}%."
+                 if tr_ev and "1deg" in tr_ev else "."),
+              f"3. In the Hohes Venn, detection increases coinciding with known fire events "
+              + ("are visible in the harmonized calendar in April 2011 and August 2026"
+                 if venn_ok else "are NOT clearly visible in the harmonized calendar in both months")
+              + ": " + "; ".join(f"{MONTH_NAMES[m - 1]} {y} → {v['text']}"
                                   for (y, m), v in vh.items()) + "."]
     # ---- limitations (honest reporting; P2 + P4 request)
     vm = {(v["mode"], v["year"], v["month"]): v["value"] for v in venn}
     h26, m26 = vm.get(("harm", 2026, 8)), vm.get(("modis", 2026, 8))
     yearly, monthly = breakdown
-    y22 = yearly.loc[("argentina", 2022), "oran"] if ("argentina", 2022) in yearly.index else np.nan
-    hi_m = [f"{MONTH_TR[k - 1][:3]} {r.oran:.2f}" for k, r in monthly.iterrows() if r.oran >= 1.15]
-    lo_m = [f"{MONTH_TR[k - 1][:3]} {r.oran:.2f}" for k, r in monthly.iterrows() if r.oran < 1.15]
+    y22 = yearly.loc[("argentina", 2022), "ratio"] if ("argentina", 2022) in yearly.index else np.nan
+    hi_m = [f"{MONTH_ABBR[k - 1]} {r.ratio:.2f}" for k, r in monthly.iterrows() if r.ratio >= 1.15]
+    lo_m = [f"{MONTH_ABBR[k - 1]} {r.ratio:.2f}" for k, r in monthly.iterrows() if r.ratio < 1.15]
     t1 = (tr_ev or {}).get("1deg")
-    lines += ["", "## Sınırlamalar ve gelecek çalışma", "",
-              f"- **2022 (test) fazla tahmin:** Arjantin'de Σharm/ΣMODIS = {fmt(y22)}. Fazlalık yangın "
-              f"sezonunda ({', '.join(hi_m)}); kesinti ayları dahil diğer aylar 1'e yakın ({', '.join(lo_m)}). "
-              "Ham veride de 2022'de MODIS/VIIRS oranı eğitim aralığının dışında (yukarıdaki tanı tablosu) → "
-              "S-NPP/Aqua kesintisi ya da kalıcı yörünge kayması ile açıklanmıyor (2023–2024 normale dönüyor).",
-              f"- **Aachen/Eifel Ağustos 2026 (bölge aktarımı, tek olay, n küçük):** harm/MODIS = "
+    lines += ["", "## Limitations and future work", "",
+              f"- **2022 (test) over-estimation:** in Argentina Σharm/ΣMODIS = {fmt(y22)}. The excess is in the "
+              f"fire season ({', '.join(hi_m)}); the other months, including outage months, are close to 1 "
+              f"({', '.join(lo_m)}). In the raw data, too, the 2022 MODIS/VIIRS ratio lies outside the training "
+              "range (diagnosis table above) → not explained by the S-NPP/Aqua outages or a persistent orbital "
+              "drift (2023–2024 return to normal).",
+              f"- **Aachen/Eifel August 2026 (region transfer, single event, small n):** harm/MODIS = "
               f"{fmt(h26 / m26 if h26 and m26 else np.nan)} ({fmt(h26, '.0f')} / {fmt(m26, '.0f')}). "
-              "Fallback'ten değil (P2: 40–50 bandının k'sıyla bile +%50); olayın örtük k'sı 0.176, "
-              "eğitimdeki tüm k'lar ≥ 0.20."]
+              "Not caused by the fallback (P2: even with the 40–50° band k it is +50%); the event's implied k is "
+              "0.176, all training k values are ≥ 0.20."]
     if t1:
         a, b = t1
-        lines.append(f"- **Transfer R² tek olaydan etkileniyor:** Aachen/Eifel 1° R²={fmt(a['r2'])} "
-                     f"(n={a['n']}, bias {fmt(a['bias_pct'], '+.1f')}%); 2026-08 hariç R²={fmt(b['r2'])}, "
-                     f"bias {fmt(b['bias_pct'], '+.1f')}% (n={b['n']}). Yani olağan dönemde toplam seviye "
-                     "tutuyor, hücre-ay deseni zayıf; büyük olayda fazla tahmin.")
-    lines += ["- **Yorum (hipotez, doğrulanmadı):** k yangın büyüklüğüne bağlı — tek büyük yangın "
-              "cephesinde VIIRS (375 m) MODIS'e (1 km) göre orantısız çok piksel sayıyor; k sadece enlem "
-              "bandı × mevsim × uyduya göre katmanlı olduğu için bunu yakalayamıyor.",
-              "- **Gelecek çalışma:** k'yı yangın büyüklüğüne (aynı gün komşu tespit kümesinin alanı / "
-              "toplam FRP) göre koşullamak; transfer için Avrupa'dan ikinci bir eğitim bölgesi.",
-              f"- **Örneklem:** Aachen/Eifel'de 2022–2024'te toplam "
+        lines.append(f"- **Transfer R² is driven by a single event:** Aachen/Eifel 1° R²={fmt(a['r2'])} "
+                     f"(n={a['n']}, bias {fmt(a['bias_pct'], '+.1f')}%); excluding 2026-08 R²={fmt(b['r2'])}, "
+                     f"bias {fmt(b['bias_pct'], '+.1f')}% (n={b['n']}). So in ordinary periods the total level "
+                     "holds but the cell-month pattern is weak; the large event is over-estimated.")
+    lines += ["- **Interpretation (hypothesis, not validated):** k depends on fire size — on a single large fire "
+              "front VIIRS (375 m) counts disproportionately many pixels compared with MODIS (1 km); k is "
+              "stratified only by latitude band × season × satellite, so it cannot capture this.",
+              "- **Future work:** condition k on fire size (area / total FRP of the same-day cluster of "
+              "neighbouring detections); a second training region in Europe for transfer.",
+              f"- **Sample size:** Aachen/Eifel has only "
               f"{int(yearly.loc['aachen_eifel', 'modis'].sum()) if 'aachen_eifel' in yearly.index.get_level_values(0) else '—'}"
-              " MODIS tespiti → bölge test metriği istatistiksel olarak anlamsız; bu yüzden "
-              "transfer_2012-2026 raporlandı."]
+              " MODIS detections in 2022–2024 → the regional test metric is statistically meaningless; "
+              "hence transfer_2012-2026 is reported."]
     text = "\n".join(lines) + "\n"
     (OUT / "summary.md").write_text(text, encoding="utf-8")
     return text
@@ -621,21 +631,21 @@ def main() -> None:
     is_mock = bool((df["version"].astype(str) == "MOCK").any())
     has_harm = bool(df["weight_harm"].notna().all())
     if is_mock:
-        print("⚠️  SENTETİK veriyle çalışılıyor. Sonuçlar sadece pipeline testi içindir.\n")
+        print("⚠️  Running on SYNTHETIC data. Results are for pipeline testing only.\n")
     if not has_harm:
-        print("ℹ️  weight_harm boş (P1 verisi) → sadece ham sayımlar; harm metrikleri atlanıyor.\n")
-    print(f"Girdi: {rel(input_path)}  ({len(df):,} satır)")
+        print("ℹ️  weight_harm empty (P1 data) → raw counts only; harm metrics skipped.\n")
+    print(f"Input: {rel(input_path)}  ({len(df):,} rows)")
 
-    k_note = (f"k_factors.csv: {len(pd.read_csv(K_PATH))} satır. P2 teyidi: k sadece Arjantin 2012–2021 "
-              "VIIRS'ten, Terra-only ağırlığı 2003–2011'den → test yılları (2022–2024) k'ya girmedi."
-              if K_PATH.exists() else "k_factors.csv yok")
+    k_note = (f"k_factors.csv: {len(pd.read_csv(K_PATH))} rows. Confirmed by P2: k only from Argentina 2012–2021 "
+              "VIIRS, Terra-only weight from 2003–2011 → test years (2022–2024) did not enter k."
+              if K_PATH.exists() else "k_factors.csv missing")
 
     rows, tables = compute_metrics(df, has_harm)
     data_kind = "mock" if is_mock else ("harm" if has_harm else "raw")
     for r in rows:
         r["data"] = data_kind
     grid_note = crosscheck_grid(tables["0.25deg"]) if has_harm and not is_mock else \
-        "monthly_grid çapraz kontrolü atlandı (sentetik ya da harmonize olmayan girdi)"
+        "monthly_grid cross-check skipped (synthetic or non-harmonized input)"
     json_rows = [r for r in rows if r["split"] in JSON_SPLITS]
     (OUT / "metrics.json").write_text(json.dumps(json_rows, indent=2, ensure_ascii=False),
                                       encoding="utf-8")
@@ -651,10 +661,10 @@ def main() -> None:
     weak = [r for r in rows if r["method"] == "harm" and r["split"] == "test"
             and (r["r2"] is None or r["r2"] < 0.5)]
     if weak:
-        print("⚠️  Düşük/negatif R² (test, harm): " +
+        print("⚠️  Low/negative R² (test, harm): " +
               ", ".join(f"{r['region']} {r['scale']} R²={fmt(r['r2'])}" for r in weak) +
-              " — saklama, pitch'te dürüstçe anlat.")
-    print(f"Yazıldı: {', '.join(sorted(p.name for p in OUT.iterdir()))}")
+              " — do not hide it, explain it honestly in the pitch.")
+    print(f"Written: {', '.join(sorted(p.name for p in OUT.iterdir()))}")
 
 
 if __name__ == "__main__":
