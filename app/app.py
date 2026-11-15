@@ -30,6 +30,7 @@ C_NODATA = "#34322e"  # calendar background (no data)
 FC_RATIO = getattr(query, "FORECAST_RATIO", 1.5)  # outlook: ratio ≥ 1.5 → above normal, ≤ 1/1.5 → below
 BACKTEST_PNG = Path(__file__).resolve().parents[1] / "docs" / "forecast" / "backtest.png"  # P4, pipeline/forecast.py
 LOGO = Path(__file__).parent / "assets" / "firewatch_logo.png"  # transparent PNG, sits on the page background
+DOODLES = Path(__file__).parent / "assets" / "doodles.svg"  # page background tile: space / earth / satellite / fire line art
 
 st.set_page_config(page_title="Active Fire Detection Calendar", page_icon=":material/local_fire_department:",
                    layout="wide")
@@ -72,9 +73,25 @@ st.markdown("""<style>
 .ol-num b {color: #ece7de;}
 .figcap {color: #a39d92; font-size: .86rem; line-height: 1.45; margin: -.3rem 0 .9rem 0;}  /* bottom: clear of the card border */
 .figcap b {color: #ece7de;}
+/* Info pages: the logo is the way home. An invisible button lies exactly over the logo (keeps the session,
+   no outline); it is not rendered on the main page, so the logo is not clickable there. */
+.st-key-logohome {position: fixed; top: 0; left: 5rem; z-index: 999990; width: 284px; height: 96px;
+                  animation: logohit-shrink linear both; animation-timeline: --page; animation-range: 0 180px;}
+.st-key-logohome > div, .st-key-logohome button {width: 100%; height: 100%; min-height: 0;}
+.st-key-logohome button, .st-key-logohome button:hover, .st-key-logohome button:focus,
+.st-key-logohome button:focus-visible, .st-key-logohome button:active
+    {opacity: 0; cursor: pointer; outline: none !important; box-shadow: none !important; border: none !important;}
+@keyframes logohit-shrink {to {height: 50px; width: 142px;}}
+@media (max-width: 768px) {.st-key-logohome {left: 1rem;}}
+/* Cards (map, calendar, annual chart, outlook, info pages) are opaque: they sit in front of the doodle background */
+[class*="st-key-card_"] {background: #1d1c1a;}
 [data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
 [data-testid="stMetricLabel"] p {color: #a39d92; font-size: .82rem;}
 </style>""", unsafe_allow_html=True)
+# page background: sparse doodle tile behind everything; scrolls with the content
+st.markdown('<style>[data-testid="stMain"] {background-image: url("data:image/svg+xml;base64,'
+            f'{base64.b64encode(DOODLES.read_bytes()).decode()}"); background-size: 560px 560px; '
+            'background-attachment: local;}</style>', unsafe_allow_html=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -247,22 +264,25 @@ for _k in KEEP:  # every run, before the widgets: otherwise a re-mounted widget 
     if _k in st.session_state:
         st.session_state[_k] = st.session_state[_k]
 if _page in PAGES:
-    st.button("← Back to the calendar", type="tertiary", on_click=open_page)
-    st.header(PAGES[_page][0])
-    PAGES[_page][1]()
+    st.button("FireWatch: back to the calendar", key="logohome", on_click=open_page)  # invisible, over the logo
+    with st.container(border=True, key="card_page"):
+        st.button("← Back to the calendar", type="tertiary", on_click=open_page)
+        st.header(PAGES[_page][0])
+        PAGES[_page][1]()
     site_footer()
     st.stop()
 
-st.markdown("**Main events**")
-q1, q2, q3 = st.columns(3)
+_top = st.container(border=True, key="card_controls")  # opaque card: text stays clear of the background doodles
+_top.markdown("**Main events**")
+q1, q2, q3 = _top.columns(3)
 q1.button("Hohes Venn · April 2011", width="stretch", on_click=demo, args=("Hohes Venn", True, 2011, 4),
           kwargs=dict(note="April 2011, MODIS-only era: 17 detections on 25–26 April, the highest April in "
                            "26 years. The map shows that month only."),
           help="MODIS-only era: highest April in 26 years (harmonized)")
-q2.button("Hohes Venn · August 2026", width="stretch", on_click=demo, args=("Hohes Venn", True, 2026, 8),
-          kwargs=dict(note="August 2026, VIIRS era: 1,899 raw detections, 169 MODIS-equivalent after "
+q2.button("Aachen/Eifel · August 2026", width="stretch", on_click=demo, args=("Aachen/Eifel", True, 2026, 8),
+          kwargs=dict(note="August 2026, VIIRS era: 2,182 raw detections, 193 MODIS-equivalent after "
                            "harmonization, the highest August in 26 years. The map shows that month only."),
-          help="Raw 1,899 vs harmonized 169 detections")
+          help="Raw 2,182 vs harmonized 193 detections")
 q3.button("La Rioja · satellite jumps", width="stretch", on_click=demo,
           args=("La Rioja (AR)", False, 2012, 4, True),
           kwargs=dict(note="La Rioja: raw annual totals step up when S-NPP (2012), NOAA-20 (2018) and NOAA-21 "
@@ -271,10 +291,10 @@ q3.button("La Rioja · satellite jumps", width="stretch", on_click=demo,
           help="Raw series steps up in 2012/2018/2023; harmonized stays level (annual chart, log axis)")
 _ev = st.session_state.get("event")
 if _ev and _ev["preset"] == st.session_state.get("preset", _ev["preset"]) and _ev["note"]:
-    st.markdown(f'<div class="facts">{_ev["note"]}</div>', unsafe_allow_html=True)
+    _top.markdown(f'<div class="facts">{_ev["note"]}</div>', unsafe_allow_html=True)
 
 # ---------- Controls (on the page, no sidebar) ----------
-c_reg, c_ser, c_time, c_dates = st.columns([1.3, 1.3, 2.4, 1], vertical_alignment="bottom")
+c_reg, c_ser, c_time, c_dates = _top.columns([1.3, 1.3, 2.4, 1], vertical_alignment="bottom")
 st.session_state.setdefault("preset", "La Rioja (AR)")   # opening region
 preset = c_reg.selectbox("Region", list(PRESETS), key="preset")
 mode_lbl = c_ser.radio("Series", [RAW, HARM], horizontal=True, key="mode_lbl",
@@ -337,7 +357,7 @@ AREA = (_bounds(st.session_state["drawn"]) if st.session_state.get("drawn") else
 
 # map on top (full width), calendar below
 col_map, col_cal = st.container(), st.container()
-with col_map.container(border=True):
+with col_map.container(border=True, key="card_map"):
     st.subheader("Spatial distribution")
     # main event selected → the heat layer shows only that month (otherwise the whole selected period)
     ev = st.session_state.get("event")
@@ -402,7 +422,7 @@ with col_map.container(border=True):
         st.caption("Note: the NW corner of the box (Aachen city, north of ≈50.73°N / west of 6.10°E) is outside "
                    "the download area; empty cells there mean no data, not zero detections.")
 
-c_stat, c_csv = st.columns([4, 1], vertical_alignment="center")
+c_stat, c_csv = st.container(border=True, key="card_stats").columns([4, 1], vertical_alignment="center")
 _conf = df["confidence_class"].astype(str).value_counts() if len(df) else {}
 c_stat.markdown(f'<div class="facts" style="margin:0"><b>{len(df):,}</b> raw detections in selection, '
                 f'{d0:%Y-%m-%d} → {d1:%Y-%m-%d} · FIRMS confidence: ' + " · ".join(
@@ -638,11 +658,11 @@ def annual_chart(df, d0, d1):
            "with every new sensor; the harmonized series should not. First and last years are partial.")
 
 
-with col_cal.container(border=True):
+with col_cal.container(border=True, key="card_cal"):
     calendar_and_anomaly(df, mode, d0, d1)
 if not df.empty:
-    with st.container(border=True):
+    with st.container(border=True, key="card_annual"):
         annual_chart(df, d0, d1)
-with st.container(border=True):
+with st.container(border=True, key="card_outlook"):
     outlook_section(geom_key)
 site_footer()
