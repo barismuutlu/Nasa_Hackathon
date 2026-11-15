@@ -259,10 +259,10 @@ q1.button("Hohes Venn · April 2011", width="stretch", on_click=demo, args=("Hoh
           kwargs=dict(note="April 2011, MODIS-only era: 17 detections on 25–26 April, the highest April in "
                            "26 years. The map shows that month only."),
           help="MODIS-only era: highest April in 26 years (harmonized)")
-q2.button("Hohes Venn · August 2026", width="stretch", on_click=demo, args=("Hohes Venn", True, 2026, 8),
-          kwargs=dict(note="August 2026, VIIRS era: 1,899 raw detections, 169 MODIS-equivalent after "
+q2.button("Aachen/Eifel · August 2026", width="stretch", on_click=demo, args=("Aachen/Eifel", True, 2026, 8),
+          kwargs=dict(note="August 2026, VIIRS era: 2,182 raw detections, 193 MODIS-equivalent after "
                            "harmonization, the highest August in 26 years. The map shows that month only."),
-          help="Raw 1,899 vs harmonized 169 detections")
+          help="Raw 2,182 vs harmonized 193 detections")
 q3.button("La Rioja · satellite jumps", width="stretch", on_click=demo,
           args=("La Rioja (AR)", False, 2012, 4, True),
           kwargs=dict(note="La Rioja: raw annual totals step up when S-NPP (2012), NOAA-20 (2018) and NOAA-21 "
