@@ -2,7 +2,10 @@
 
 **NASA Space Apps Challenge 2026 — "Harmonization of MODIS and VIIRS Hot Spots"**
 
-> **Live demo:** https://activefiredetectioncalendar.streamlit.app/ · **Presentation:** _[link — coming soon]_
+![FireWatch: one consistent fire-detection record from MODIS and VIIRS](docs/img/firewatch_banner.png)
+<sub>Concept illustration (AI-generated), not data.</sub>
+
+> **Live demo:** https://firewatch.barismutlu.de · **Backup:** https://activefiredetectioncalendar.streamlit.app/
 
 NASA's 25-year fire record was built by a changing fleet of satellites. MODIS (Terra 2000, Aqua 2002)
 is nearing the end of its mission; the VIIRS instruments (Suomi NPP 2012, NOAA-20 2018, NOAA-21 2023)
@@ -10,8 +13,14 @@ are far more sensitive. Every time a new satellite comes online, **raw detection
 nothing changed on the ground.** A trend line drawn from raw counts shows fire activity rising sharply
 after 2012; part of that is simply more, and better, sensors looking.
 
+![MODIS vs VIIRS daily global coverage on 29 May 2013](docs/img/modis_vs_viirs_coverage.png)
+<sub>True-colour images from all orbits of one day, 29 May 2013. MODIS (A, ~2,330 km swath) leaves gaps between orbits near the equator; VIIRS (B, ~3,000 km swath) covers the whole globe — one reason VIIRS sees more. Figure: Levy et al. (2015), *Atmos. Meas. Tech.* 8, 4083–4110, Fig. 1, [doi:10.5194/amt-8-4083-2015](https://doi.org/10.5194/amt-8-4083-2015), CC BY 3.0 (panel titles added).</sub>
+
 We built an open data pipeline and an interactive app that convert VIIRS detections into
 **MODIS-equivalent counts**, so the record from 2000 to today can be read as one consistent monthly calendar.
+
+![Argentina, annual detections: raw vs harmonized vs MODIS only](docs/validation/annual_raw_vs_harm.png)
+<sub>Argentina, detections per year. Raw counts (purple) jump with each new VIIRS satellite (2012, 2018, 2023); the harmonized series (green) stays on the MODIS-only line (blue). Grey band: test years 2022–2024, not used for training.</sub>
 
 ---
 
@@ -34,6 +43,9 @@ We built an open data pipeline and an interactive app that convert VIIRS detecti
 
 All 2011 detections are on the **Belgian** side of the Hohes Venn. Had we downloaded only German data,
 the event would not appear at all — which is why our study areas are coordinate boxes, not countries.
+
+![Hohes Venn monthly detection calendar, raw vs harmonized](docs/validation/venn_check.png)
+<sub>Hohes Venn, monthly detection calendar 2000–2026: raw (left) and harmonized (right) on the same colour scale. April 2011 and August 2026 are the highest months of their calendar month in 26 years.</sub>
 
 ## How it works
 
@@ -80,6 +92,9 @@ Coefficients were learned from Argentina 2012–2021 only. Source: [`docs/valida
   of the April 2011 detections fall on burned pixels. MCD64A1 itself uses MODIS active-fire data, so this is
   not an independent validation.
 
+![Prediction vs truth per cell-month](docs/validation/pred_vs_true.png)
+<sub>Harmonized VIIRS (prediction) vs MODIS count (truth) per cell-month. Left: Argentina test years 2022–2024. Right: Aachen/Eifel transfer — the fit is driven largely by one event (August 2026).</sub>
+
 ## Experimental: 30-day detection outlook
 
 Because the harmonized series is consistent across satellite changes, it can be used for forecasting. A simple
@@ -92,6 +107,9 @@ detection counts** — not a fire forecast.
   detections (80% range 1,500–5,400) vs. a 10-year normal of 3,700 → *near normal*.
 - NASA POWER weather and an El Niño index derived from NASA MERRA-2 were tested and **did not improve** skill
   (branch `p4/forecast-experiments`). Details: [`docs/forecast/`](docs/forecast/), [`pipeline/forecast.py`](pipeline/forecast.py).
+
+![Experimental 30-day outlook, backtest 2015–2025](docs/forecast/backtest.png)
+<sub>Backtest 2015–2025: actual harmonized detections (black), 30-day outlook (teal) and 10-year normal (dashed). Experimental; an outlook of detection counts, not a fire forecast.</sub>
 
 ## Data
 
@@ -222,4 +240,5 @@ Code identifiers are in English; some internal docs and code comments are in Tur
 
 We used AI coding assistants (Claude Code) to write and review code and documentation. All data-processing
 choices, scientific assumptions and results were reviewed by the team; the validation numbers come from
-running the pipeline on NASA data, not from the assistant.
+running the pipeline on NASA data, not from the assistant. The banner image at the top is an AI-generated
+concept illustration; all charts are generated from the data by the pipeline.
