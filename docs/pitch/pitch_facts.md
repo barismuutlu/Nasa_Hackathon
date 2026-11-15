@@ -1,125 +1,125 @@
-# Pitch: doğrulanmış sayılar, tabanlar ve sınırlamalar
+# Pitch: verified numbers, baselines and limitations
 
-P6 İbrahim · 14 Kasım 2026 · Güncel sözleşme v1.3.
+P6 İbrahim · 14 November 2026 · Current contract v1.3.
 
-## Kaynak ve doğrulama düzeyi
+## Source and validation level
 
-- P1 Süleyman: kullanıcı tarafından iletilen coğrafi filtre, ham sayımlar, Nisan kapsamı ve MCD64A1 kontrolü; ilk referans `7ddfc51`, yeni teslim `26fa38d`. Ağustos harmonize aylık toplamı daha hassas gösterimle 169,2 olarak iletildi.
-- P1 son inceleme (`9c8abb9` referanslı mesaj): Nisan geçişleri ve taban tablosu, Ağustos toplamları/harmonize tahmin, MCD64A1 sayıları/tarihleri/duyarlılığı ve La Rioja yıllıkları veriden tek tek kontrol edilmiş; sayısal fark bildirilmemiştir. Bu P1'in kontrol raporudur; P6'nın yerel tekrar hesabı değildir.
-- P5 Yusuf: AppTest + query API ile T01–T10 sonuçları; bildirilen uygulama referansı `2bc0e31`. T08 elle, T06 benzetimle test edilmiş. Bu kayıtlar P6'nın yerel tekrar testi değildir; uygulama commit'i veri dosyasının sürümünü tek başına tanımlamaz.
-- P4 Barış: `f0f0759` tesliminde tam harmonize veriyle sorgulanan Hohes Venn ve La Rioja sayıları. P2 uygulaması `f44bca1` ile gelmiş.
-- P3 Oğuzhan: `b4cbbd4` ile gelen [metrics.json](../validation/metrics.json), [summary.md](../validation/summary.md) ve gerçek veri grafikleri; `c6f15ad` ile MCD64A1 destekleyici özeti eklendi. Aşağıdaki test metrikleri doğrudan JSON kayıtlarından alınmıştır.
-- P6 yerel kontrolü: belgeler, JSON ve grafikler incelendi. Tam parquet ve Python 3.12 ortamı bu makinede bulunmadığından sayımlar veya model testleri burada yeniden çalıştırılmadı.
+- P1 Süleyman: geographic filter, raw counts, April coverage and MCD64A1 check relayed by the user; first reference `7ddfc51`, new submission `26fa38d`. The August harmonized monthly total was relayed with more precise display as 169.2.
+- P1 final review (message with reference `9c8abb9`): the April overpasses and baseline table, August totals/harmonized estimate, MCD64A1 counts/dates/sensitivity and La Rioja annual totals were checked one by one against the data; no numerical difference was reported. This is P1's check report; it is not P6's local recomputation.
+- P5 Yusuf: T01–T10 results with AppTest + query API; reported app reference `2bc0e31`. T08 tested manually, T06 by simulation. These records are not P6's local re-test; the app commit alone does not identify the version of the data file.
+- P4 Barış: Hohes Venn and La Rioja counts queried with the full harmonized data in the `f0f0759` submission. The P2 implementation came with `f44bca1`.
+- P3 Oğuzhan: [metrics.json](../validation/metrics.json), [summary.md](../validation/summary.md) and real-data charts that came with `b4cbbd4`; the MCD64A1 supporting summary was added with `c6f15ad`. The test metrics below are taken directly from the JSON records.
+- P6 local check: documents, JSON and charts were reviewed. Because the full parquet and a Python 3.12 environment are not available on this machine, the counts or model tests were not re-run here.
 
-## Coğrafi filtre ve veri kapsamı
+## Geographic filter and data coverage
 
-Hohes Venn: boylam 5.95–6.25, enlem 50.45–50.60; sınırlar dahil, `query.PRESETS["Hohes Venn"]` ile aynı kutu. İndirme alanı `aachen_eifel`; kutu Belçika tarafını da kapsar. P1/P5'in bildirdiği tam veri kapsamı 2000-11-01 → 2026-11-13, tam harmonize veri 7.082.663 satırdır.
+Hohes Venn: longitude 5.95–6.25, latitude 50.45–50.60; bounds inclusive, same box as `query.PRESETS["Hohes Venn"]`. Download area `aachen_eifel`; the box also covers the Belgian side. The full data coverage reported by P1/P5 is 2000-11-01 → 2026-11-13; the full harmonized data is 7,082,663 rows.
 
-Nisan 2000 veri kapsamı dışındadır. İncelenen Nisanlar 2001–2026: toplam 26 Nisan; 2011 hariç karşılaştırma tabanı 25 Nisan. “26 yıl” yerine bu ay kapsamını açıkça yaz.
+April 2000 is outside the data coverage. Aprils examined 2001–2026: 26 Aprils in total; comparison baseline excluding 2011 is 25 Aprils. Write this month coverage explicitly instead of “26 years”.
 
-## Nisan 2011: aynı 17 tespit, farklı karşılaştırma tabanları
+## April 2011: the same 17 detections, different comparison baselines
 
-25 Nisan: Terra 9; 26 Nisan: Terra 5 + Aqua 3. Toplam 17 MODIS piksel tespiti, üç geçiş; tümü `type=0` ve Belçika tarafında. Nisan 2011'de MODIS ağırlığı 1 olduğu için harmonize toplam da 17 MODIS-eşdeğeridir. Yalnız Almanya verisi alınsaydı bu tespitler görünmeyecekti.
+25 April: Terra 9; 26 April: Terra 5 + Aqua 3. In total 17 MODIS pixel detections, three overpasses; all `type=0` and on the Belgian side. Because the MODIS weight is 1 in April 2011, the harmonized total is also 17 MODIS-equivalent. If only German data had been taken, these detections would not have been visible.
 
-| Seri / dönem | 2011 değeri | Diğer Nisanların ortalaması | Ortalamanın katı | Sıra |
+| Series / period | 2011 value | Mean of the other Aprils | Times the mean | Rank |
 |---|---:|---:|---:|---|
-| Yalnız MODIS, 2001–2025; önceki karşılaştırma | 17 MODIS tespiti | 0,67; 24 referans Nisanı | 25,5×; konuşmada yaklaşık 25× | İncelenen dönemin en yüksek Nisanı |
-| Yalnız MODIS, 2001–2026 | 17 MODIS tespiti | 0,64; 25 referans Nisanı | 26,6× | 1/26 |
-| Ham, tüm uydular, 2001–2026 | 17 tespit | 2,64; 25 referans Nisanı | 6,4× | 1/26 |
-| Harmonize, 2001–2026; ana demo tanımı | 17 MODIS-eşdeğeri | 0,59; 25 referans Nisanı | 28,7×; konuşmada yaklaşık 29× | 1/26 |
+| MODIS only, 2001–2025; earlier comparison | 17 MODIS detections | 0.67; 24 reference Aprils | 25.5×; in the talk about 25× | Highest April of the examined period |
+| MODIS only, 2001–2026 | 17 MODIS detections | 0.64; 25 reference Aprils | 26.6× | 1/26 |
+| Raw, all satellites, 2001–2026 | 17 detections | 2.64; 25 reference Aprils | 6.4× | 1/26 |
+| Harmonized, 2001–2026; main demo definition | 17 MODIS-equivalent | 0.59; 25 reference Aprils | 28.7×; in the talk about 29× | 1/26 |
 
-Ortalama ve oranlar gösterim için yuvarlatılmıştır; kat değerleri yuvarlanmamış tabanla hesaplanır. Örneğin eski 0,67 gösterimini yeniden bölerek 25,5× sonucunu değiştirme. Kartın ≈29× değeriyle eski MODIS-only ≈25× değerini aynı tabanmış gibi sunma.
+Means and ratios are rounded for display; the times values are computed with the unrounded baseline. For example, do not change the 25.5× result by re-dividing by the old 0.67 display. Do not present the card's ≈29× value and the old MODIS-only ≈25× value as if they had the same baseline.
 
-P3'ün yeni “0,64, yaklaşık 27 kat” düzeltmesi, tablodaki **yalnız MODIS, 2001–2026** tanımına karşılık gelir; harmonize kartın ≈0,59 / ≈29× tanımının yerine geçirilmez. P1/P4'ün seri ayrımı ve P3 özetinin ayrı `modis` / `harm` satırları bunu ayırır. Taban belirtmeden kullanılabilecek güvenli ifade: “2001–2026'daki 26 Nisan içinde birinci; harmonize seride diğer yıllarda en fazla 3 MODIS-eşdeğeri tespit.”
+P3's new “0.64, about 27 times” correction corresponds to the **MODIS only, 2001–2026** definition in the table; it does not replace the harmonized card's ≈0.59 / ≈29× definition. P1/P4's series separation and the separate `modis` / `harm` rows of the P3 summary keep these apart. Safe wording that can be used without stating the baseline: “First among the 26 Aprils in 2001–2026; in the harmonized series, at most 3 MODIS-equivalent detections in the other years.”
 
-Ana sunum cümlesi:
+Main presentation sentence:
 
-> Nisan 2011'de 17 MODIS-eşdeğeri tespit var. 2001–2026'daki diğer 25 Nisanın ortalaması yaklaşık 0,59: bu ay yaklaşık 29 katıyla incelenen 26 Nisanın en yükseği.
+> April 2011 has 17 MODIS-equivalent detections. The mean of the other 25 Aprils in 2001–2026 is about 0.59: at about 29 times that, this month is the highest of the 26 Aprils examined.
 
-Ham kartta yaklaşık 6,4×, harmonize kartta 28,7× görünmesi taban farkıdır; hata değildir. Ham tabanda VIIRS Nisanları da bulunur. Bu değişim “yangın gerçekte beş kat daha şiddetliydi” veya yöntemin tek başına doğrulandığı anlamına gelmez.
+That the raw card shows about 6.4× and the harmonized card 28.7× is a baseline difference; it is not an error. The raw baseline also includes VIIRS Aprils. This change does not mean “the fire was really five times more severe” or that the method is validated on its own.
 
-## Ağustos 2026: aylık toplam ve olay penceresi
+## August 2026: monthly total and event window
 
-| Ölçü | Değer | Kaynak / kapsam |
+| Measure | Value | Source / coverage |
 |---|---:|---|
-| MODIS | 105 piksel tespiti | P1/P5: 14–17 Ağustos; P1 aynı kutuda ayın tüm tespitlerinin bu aralıkta olduğunu bildirdi |
-| VIIRS | 1.794 piksel tespiti | Aynı olay penceresi |
-| Ham toplam | 1.899 tespit | P4 ve P3: Ağustos ayının tamamı |
-| Harmonize toplam | 169,2 MODIS-eşdeğeri; konuşmada yaklaşık 169 | P1 yeni tam veri bildirimi; P4/P3 özeti ve grafiği tam sayıya yuvarlatır |
-| Ham VIIRS/MODIS oranı | Yaklaşık 17,1× | 1.794 / 105; evrensel katsayı değildir |
+| MODIS | 105 pixel detections | P1/P5: 14–17 August; P1 reported that all of the month's detections in the same box fall in this range |
+| VIIRS | 1,794 pixel detections | Same event window |
+| Raw total | 1,899 detections | P4 and P3: the whole month of August |
+| Harmonized total | 169.2 MODIS-equivalent; in the talk about 169 | P1 new full-data notice; P4/P3 summary and chart round to a whole number |
+| Raw VIIRS/MODIS ratio | About 17.1× | 1,794 / 105; not a universal coefficient |
 
-P1'in son teyidi: kutudaki tüm Ağustos aktif tespitleri 14–17 Ağustos'tadır. P4'ün önceki 13–25 Ağustos kontrol aralığı bu dar aralığı içerir. Bunlar MCD64A1 ürününün aşağıda verilen **15–23 Ağustos yanma tarihleriyle aynı tarih alanı değildir**. P6 tarih sınırlarını yerelde tekrar sorgulamadı. Ana demoda 169,2 tahminini aylık birimle etiketle. 14–17 Ağustos seçildiğinde sonuç aynı sayıda olsa da hücre tarih seçimi nedeniyle kısmi ay olarak işaretlenmelidir.
+P1's final confirmation: all August active detections in the box are on 14–17 August. P4's earlier 13–25 August check range contains this narrow range. These are **not the same date field as the 15–23 August burn dates** of the MCD64A1 product given below. P6 did not re-query the date bounds locally. In the main demo, label the 169.2 estimate with its monthly unit. When 14–17 August is selected, even though the result is the same number, the cell must be marked as a partial month because of the date selection.
 
-Bu, eşleştirilmiş aynı-geçiş deneyi değildir. Sensör, çözünürlük, uydu sayısı ve gözlem kapsamı ham oranı etkileyebilir. “VIIRS her zaman 17 kat daha hassas” denmez. Yaklaşık 169 tahmin, 105 MODIS referansının yaklaşık %61 üzerindedir; bu olayda tam eşleşme veya kusursuz düzeltme iddia edilmez.
+This is not a paired same-overpass experiment. Sensor, resolution, number of satellites and observation coverage can affect the raw ratio. Do not say “VIIRS is always 17 times more sensitive”. The about 169 estimate is about 61% above the 105 MODIS reference; for this event no exact match or perfect correction is claimed.
 
-## MCD64A1 yanmış alan: destekleyici kanıt
+## MCD64A1 burned area: supporting evidence
 
-Kaynak: P1'in `26fa38d` referanslı mesajı; `pipeline/burned_area_check.py` yöntem açıklaması; P3'ün `c6f15ad` ile güncellenen `summary.md` içindeki destekleyici tablo. Ayrı çıktı `data/burned_area_check.csv`; bu CSV P6 makinesinde yeniden çalıştırılmadı ve git'e eklenmedi.
+Source: P1's message with reference `26fa38d`; method description of `pipeline/burned_area_check.py`; the supporting table in P3's `summary.md` updated with `c6f15ad`. Separate output `data/burned_area_check.csv`; this CSV was not re-run on P6's machine and was not added to git.
 
-Görsel ve slayt kaynak adı: **NASA MCD64A1 C6.1** (aylık yanmış alan, yaklaşık 500 m). P3'ün yenilenmiş [venn_check.png](../validation/venn_check.png) grafiğinde bu destekleyici sayımlar alt not olarak bulunur; P6 grafiği değiştirmez.
+Visual and slide source name: **NASA MCD64A1 C6.1** (monthly burned area, about 500 m). P3's refreshed [venn_check.png](../validation/venn_check.png) chart contains these supporting counts as a footnote; P6 does not change the chart.
 
-Eşleştirme ayarı: tespitin düştüğü MCD64A1 pikseli ve çevresinde **3×3 piksel komşuluğu (yaklaşık 1,4 km genişlik)**; aktif tespit tarihi ile ürünün yanma tarihi arasında **±16 gün**. Bu yaklaşık mesafe bir dairesel yarıçap veya kesin yangın sınırı değildir.
+Matching setting: the MCD64A1 pixel the detection falls in and a **3×3 pixel neighborhood (about 1.4 km width)** around it; **±16 days** between the active detection date and the product's burn date. This approximate distance is not a circular radius or an exact fire perimeter.
 
-| Dönem / enstrüman | Eşleşen / toplam aktif tespit | MCD64A1 ürününde bildirilen yanma tarihleri |
+| Period / instrument | Matched / total active detections | Burn dates reported in the MCD64A1 product |
 |---|---:|---|
-| Nisan 2011 / MODIS | 9/17 (%53) | 24–28 Nisan 2011 |
-| Ağustos 2026 / MODIS | 93/105 (%89) | 15–23 Ağustos 2026 |
-| Ağustos 2026 / VIIRS | 1.674/1.794 (%93) | 15–23 Ağustos 2026 |
+| April 2011 / MODIS | 9/17 (53%) | 24–28 April 2011 |
+| August 2026 / MODIS | 93/105 (89%) | 15–23 August 2026 |
+| August 2026 / VIIRS | 1,674/1,794 (93%) | 15–23 August 2026 |
 
-Sunum cümlesi:
+Presentation sentence:
 
-> Nisan 2011'deki 17 MODIS tespitinin 9'u, 3×3 piksel komşuluğunda (yaklaşık 1,4 km), NASA'nın MCD64A1 ürününün 24–28 Nisan'da yanmış işaretlediği alanlarla örtüşüyor. Bu destekleyici kanıttır; bağımsız doğrulama değildir.
+> 9 of the 17 MODIS detections in April 2011 overlap, within a 3×3 pixel neighborhood (about 1.4 km), with areas that NASA's MCD64A1 product marked as burned on 24–28 April. This is supporting evidence; it is not independent validation.
 
-MCD64A1 algoritması MODIS aktif yangın verisini de kullanır; küçük yanıkları kaçırabilir. “Doğrulandı” veya “kanıtlandı” denmez. Nisan eşleşmesi ayara bağlıdır: tek pikselde 5/17, 3×3'te 9/17, 5×5'te 15/17 (P1 bildirimi; zaman toleransı ±16 gün). P1'in son konum açıklamasına göre kalan 8 tespit, eşleşenlerin güney/doğu çevresindedir; 5×5 komşulukta bu 8 tespitin 6'sı daha eşleşir. Yanık sınırı haritasıyla ölçüm yapılmadığından bunlar “yanık kenarında” diye tanımlanmaz. Eşleşmeme, yanlış aktif tespit kanıtı değildir. `unknown` / `no_data`, “yanmamış” ile aynı değildir. Bu örtüşme oranları bağımsız sınıflandırma doğruluğu veya harmonizasyon test metriği olarak sunulmaz.
+The MCD64A1 algorithm also uses MODIS active fire data; it can miss small burns. Do not say “validated” or “proven”. The April match depends on the setting: 5/17 at a single pixel, 9/17 at 3×3, 15/17 at 5×5 (P1 notice; time tolerance ±16 days). According to P1's final location description, the remaining 8 detections are around the south/east of the matched ones; in a 5×5 neighborhood 6 of these 8 detections also match. Since no measurement was made against a burn perimeter map, these are not described as “at the burn edge”. Not matching is not evidence of a false active detection. `unknown` / `no_data` is not the same as “unburned”. These overlap ratios are not presented as independent classification accuracy or as a harmonization test metric.
 
-Eski Belçika ülke-yıl dosyasındaki 17 satırla yeni DL_FIRE çıktısının aynı olması, P1'in bildirdiği **iki FIRMS indirmesi arasında tutarlılık kontrolüdür**; bağımsız sensör veya yangın olayı doğrulaması değildir.
+That the 17 rows in the old Belgium country-year file are the same as the new DL_FIRE output is, as reported by P1, **a consistency check between two FIRMS downloads**; it is not independent sensor or fire event validation.
 
-## La Rioja: yıllık örnekler
+## La Rioja: annual examples
 
-P4'ün tam veri `query.py` sorgusundan ilettiği sonuçlar:
+Results relayed by P4 from the full-data `query.py` query:
 
-| Yıl | Ham, tüm uydular | Harmonize, MODIS-eşdeğeri | Yalnız MODIS referansı |
+| Year | Raw, all satellites | Harmonized, MODIS-equivalent | MODIS-only reference |
 |---|---:|---:|---:|
 | 2011 | 868 | 868 | 868 |
-| 2012 | 3.437 | 808 | 731 |
-| 2018 | 7.240 | 931 | 1.057 |
-| 2023 | 10.728 | 985 | 907 |
+| 2012 | 3,437 | 808 | 731 |
+| 2018 | 7,240 | 931 | 1,057 |
+| 2023 | 10,728 | 985 | 907 |
 
-2012'de ham seri yaklaşık dört katına çıkarken harmonize değer 868'den 808'e gelir. Bu görsel örnek bağımsız test metriği yerine geçmez. Sınırlama: 2017'de harmonize 3.236, MODIS 2.447; tahmin referansın yaklaşık %32 üzerindedir.
+In 2012 the raw series roughly quadruples while the harmonized value goes from 868 to 808. This visual example does not replace an independent test metric. Limitation: in 2017 harmonized 3,236, MODIS 2,447; the estimate is about 32% above the reference.
 
-## P3: bağımsız test sonuçları
+## P3: independent test results
 
-Kaynak `docs/validation/metrics.json`, commit `b4cbbd4`. Aşağıdaki bütün satırlarda `data="harm"`, ölçek `1deg`. Hedef MODIS tespit sayısıdır; doğrulanmış yangın sayısı değildir. `n` hücre-ay örnek sayısıdır. `bias` tespit/hücre-ay biriminde, `bias_pct` toplam göreli sapmadır.
+Source `docs/validation/metrics.json`, commit `b4cbbd4`. In all rows below `data="harm"`, scale `1deg`. The target is the MODIS detection count; it is not a validated fire count. `n` is the number of cell-month samples. `bias` is in detections/cell-month units, `bias_pct` is the total relative deviation.
 
-| Bölge | Yöntem | Split / dönem | R² | Bias | Bias % | n |
+| Region | Method | Split / period | R² | Bias | Bias % | n |
 |---|---|---|---:|---:|---:|---:|
-| argentina | harm | test / 2022–2024 | 0,7918 | +1,3674 | +6,72 | 8.616 |
-| argentina | raw_viirs | test / 2022–2024 | -74,8202 | +159,8763 | +785,90 | 8.616 |
-| argentina | harm | test_2022 / 2022 | 0,7052 | +5,0232 | +18,36 | 2.834 |
-| argentina | harm | test_2023-2024 / 2023–2024 | 0,9291 | -0,4244 | -2,51 | 5.782 |
+| argentina | harm | test / 2022–2024 | 0.7918 | +1.3674 | +6.72 | 8,616 |
+| argentina | raw_viirs | test / 2022–2024 | -74.8202 | +159.8763 | +785.90 | 8,616 |
+| argentina | harm | test_2022 / 2022 | 0.7052 | +5.0232 | +18.36 | 2,834 |
+| argentina | harm | test_2023-2024 / 2023–2024 | 0.9291 | -0.4244 | -2.51 | 5,782 |
 
-Eğitim bölgesi Arjantin, VIIRS katsayıları için dönem 2012–2021; P2/P3 teyidine göre 2022–2024 katsayılara girmemiştir. Terra-only erken dönem düzeltmesi için ayrı 2003–2011 eğitim aralığı kullanılır. NOAA-21 için eğitimde doğrudan örnek yok; yöntemde NOAA-20 katsayıları vekil olarak kullanılır.
+The training region is Argentina, the period for the VIIRS coefficients is 2012–2021; according to P2/P3 confirmation, 2022–2024 did not enter the coefficients. A separate 2003–2011 training range is used for the Terra-only early-period correction. There are no direct training samples for NOAA-21; the method uses the NOAA-20 coefficients as a proxy.
 
-Ana test cümlesi: “Arjantin'de 2022–2024 bağımsız testinde, 1° hücre-ay ölçeğinde R² yaklaşık 0,79; toplam sapma +%6,72; n=8.616.” 2022'deki +%18,36 fazla tahmini saklama. P3'ün son yönlendirmesi gereği Aachen/Eifel 2022–2024 test R²'si pitch'te kullanılmaz: bu dönemde yalnız 7 MODIS tespiti vardır ve örneklem yetersizdir.
+Main test sentence: “In the independent 2022–2024 test in Argentina, at the 1° cell-month scale, R² is about 0.79; total deviation +6.72%; n=8,616.” Do not hide the +18.36% overestimate in 2022. Per P3's latest guidance, the Aachen/Eifel 2022–2024 test R² is not used in the pitch: there are only 7 MODIS detections in this period and the sample is insufficient.
 
-`summary.md` ve `pred_vs_true.png` ayrıca `transfer_2012-2026` sonuçları içeriyor. Bu split mevcut sözleşmenin izinli değerlerinde ve `metrics.json` içinde yok; P3 özeti P4 onayının beklendiğini belirtiyor. Bu nedenle aktarım R²'si ana sunuma alınmaz; iki panelli `pred_vs_true.png` bütün olarak sunuma hazır sayılmaz.
+`summary.md` and `pred_vs_true.png` also contain `transfer_2012-2026` results. This split is not among the allowed values of the current contract and not in `metrics.json`; the P3 summary states that P4 approval is awaited. Therefore the transfer R² is not taken into the main presentation; the two-panel `pred_vs_true.png` as a whole is not considered ready for the presentation.
 
-Sınırlama slaytı [slides/limitations.md](slides/limitations.md) içindedir. P3 mesajındaki yıllık belirsizlik bandı için mevcut JSON'da ayrı bir hesap/yöntem kaydı bulunmadığından bu bant slayta sayısal sonuç olarak eklenmedi.
+The limitations slide is in [slides/limitations.md](slides/limitations.md). Because there is no separate calculation/method record in the current JSON for the annual uncertainty band in P3's message, this band was not added to the slide as a numerical result.
 
-## Veri ve yöntem kuralları
+## Data and method rules
 
-Girdiler yalnız FIRMS DL_FIRE archive/NRT; indirme alanları `argentina` ve `aachen_eifel`. Eski ülke-yıl CSV dosyaları kapsam dışıdır. Yöntem A uygulaması enlem bandı, yerel mevsim ve uydu için MODIS/VIIRS katsayılarını aktif VIIRS uydu sayısına böler; `Σ weight_harm` MODIS-eşdeğeri tahmindir. Bölge ve olay aktarımı sınırlıdır; uydu etkisinin tamamen giderildiği söylenmez.
+Inputs are only FIRMS DL_FIRE archive/NRT; download areas `argentina` and `aachen_eifel`. The old country-year CSV files are out of scope. The Method A implementation divides the MODIS/VIIRS coefficients for latitude band, local season and satellite by the number of active VIIRS satellites; `Σ weight_harm` is the MODIS-equivalent estimate. Transfer across regions and events is limited; it is not claimed that the satellite effect is fully removed.
 
-Bir piksel tespiti yangın olayı değildir; üç geçiş üç yangın anlamına gelmez. FIRMS bitki yangını tipi bağımsız olay doğrulaması değildir. Anomali etiketi tespit sayısına ilişkindir. Sentetik ekran görüntüsü ve NASA logosu kullanılmaz.
+A pixel detection is not a fire event; three overpasses do not mean three fires. The FIRMS vegetation fire type is not independent event validation. The anomaly label refers to the detection count. Synthetic screenshots and the NASA logo are not used.
 
-## Tekrar üretim ve görseller
+## Reproduction and visuals
 
-Python 3.12 + sabit `requirements.txt` ortamı etkin ve gerçek harmonize veri hazırken, repo kökünde:
+With a Python 3.12 + pinned `requirements.txt` environment active and the real harmonized data ready, at the repo root:
 
 ~~~powershell
 python -c "import sys; sys.path.insert(0,'app'); import query; v=query.get_hotspots('Hohes Venn'); [print(m, query.anomaly(query.monthly_matrix(v,m),2011,4)) for m in ('raw','harm')]"
 ~~~
 
-Beklenen, P1/P4 bildirimi: raw value=17, mean≈2,64, rank=1, n_years=26; harm value=17, mean≈0,59, rank=1, n_years=26. Bu komut burada çalıştırılmadı.
+Expected, per P1/P4 notice: raw value=17, mean≈2.64, rank=1, n_years=26; harm value=17, mean≈0.59, rank=1, n_years=26. This command was not run here.
 
-Gerçek veri P3 takvimi [venn_check.png](../validation/venn_check.png) yerelde görsel olarak incelendi. Canlı Cloud ekran görüntüleri ve prova henüz P6 tarafından tamamlanmadı; akış [demo.md](demo.md), durum [test_notes.md](test_notes.md) içinde. Tarihsel 144 CSV manifesti ve cloud ortam raporu [data_handoff.md](data_handoff.md) ile [environment_check.md](environment_check.md) içinde korunur; güncel pipeline/test kanıtı yerine kullanılmaz.
+The real-data P3 calendar [venn_check.png](../validation/venn_check.png) was visually reviewed locally. Live Cloud screenshots and the rehearsal have not yet been completed by P6; the flow is in [demo.md](demo.md), the status in [test_notes.md](test_notes.md). The historical 144-CSV manifest and the cloud environment report are kept in [data_handoff.md](data_handoff.md) and [environment_check.md](environment_check.md); they are not used in place of current pipeline/test evidence.

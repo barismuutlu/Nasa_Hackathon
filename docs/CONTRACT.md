@@ -1,283 +1,283 @@
-# Veri & Arayüz Sözleşmesi v1.5
+# Data & Interface Contract v1.5
 
-Sahibi: **P4 Barış**. Kod karşılığı: [`contract.py`](../contract.py) (sabitler + `validate_hotspots()`).
-Değişiklik → önce P4. Her değişiklik en alttaki **Değişiklik günlüğü**ne yazılır.
+Owner: **P4 Barış**. Code counterpart: [`contract.py`](../contract.py) (constants + `validate_hotspots()`).
+Changes → P4 first. Every change is recorded in the **Changelog** at the bottom.
 
-Kaynaklar: FIRMS öznitelik tablosu (earthdata.nasa.gov → FIRMS → Active Fire Data Attributes).
-✅ Gerçek CSV başlıkları P1 tarafından doğrulandı (v1.2, §3).
+Sources: FIRMS attribute table (earthdata.nasa.gov → FIRMS → Active Fire Data Attributes).
+✅ Real CSV headers verified by P1 (v1.2, §3).
 
 ---
 
-## 1. `data/hotspots.parquet` — kanonik şema
+## 1. `data/hotspots.parquet` — canonical schema
 
-Bir satır = bir uydunun bir geçişte tespit ettiği bir **termal anomali pikseli** (hotspot).
-Bir satır **doğrulanmış bir orman yangını olayı DEĞİLDİR** (bkz. §8 Terminoloji).
+One row = one **thermal anomaly pixel** (hotspot) detected by one satellite in one overpass.
+A row is **NOT a verified wildfire event** (see §8 Terminology).
 
-| # | Sütun | dtype | Zorunlu | FIRMS kaynağı | Not |
+| # | Column | dtype | Required | FIRMS source | Note |
 |---|---|---|---|---|---|
-| 1 | `latitude` | float64 | ✅ | `latitude` | piksel merkezi (MODIS 1 km, VIIRS 375 m) |
+| 1 | `latitude` | float64 | ✅ | `latitude` | pixel center (MODIS 1 km, VIIRS 375 m) |
 | 2 | `longitude` | float64 | ✅ | `longitude` | |
-| 3 | `acq_date` | datetime64[ns] | ✅ | `acq_date` | **UTC** tarih, saat 00:00 |
-| 4 | `acq_time` | int16 | ✅ | `acq_time` | HHMM UTC (0–2359); baştaki sıfır kaybı sorun değil |
-| 5 | `datetime_utc` | datetime64[ns, UTC] | ✅ | türetilir | `acq_date + HH:MM` |
-| 6 | `year` | int16 | ✅ | türetilir | `acq_date` (UTC) yılı |
-| 7 | `month` | int8 | ✅ | türetilir | 1–12 |
-| 8 | `instrument` | category | ✅ | `instrument` / sütunlardan | `MODIS` \| `VIIRS` |
+| 3 | `acq_date` | datetime64[ns] | ✅ | `acq_date` | **UTC** date, time 00:00 |
+| 4 | `acq_time` | int16 | ✅ | `acq_time` | HHMM UTC (0–2359); losing the leading zero is not a problem |
+| 5 | `datetime_utc` | datetime64[ns, UTC] | ✅ | derived | `acq_date + HH:MM` |
+| 6 | `year` | int16 | ✅ | derived | year of `acq_date` (UTC) |
+| 7 | `month` | int8 | ✅ | derived | 1–12 |
+| 8 | `instrument` | category | ✅ | `instrument` / from columns | `MODIS` \| `VIIRS` |
 | 9 | `satellite` | category | ✅ | `satellite` | `Terra` \| `Aqua` \| `SNPP` \| `NOAA20` \| `NOAA21` (§3) |
-| 10 | `confidence` | string | ✅ | `confidence` | **orijinal değer, olduğu gibi**: MODIS `"0"`–`"100"`, VIIRS `"l"`/`"n"`/`"h"` |
-| 11 | `confidence_class` | category | ✅ | türetilir | `low` \| `nominal` \| `high` — MODIS: <30 / 30–79 / ≥80 (**proje kuralı**, FIRMS sayısal eşik vermiyor) |
-| 12 | `version` | string | ✅ | `version` | ör. `6.1`, `6.1NRT`, `2.0NRT`; sahte veri: `MOCK` |
-| 13 | `brightness` | float32 | ⬜ | MODIS `brightness` / VIIRS `bright_ti4` | K. **İki enstrüman arasında karşılaştırılamaz** (farklı kanal/çözünürlük) |
-| 14 | `brightness_2` | float32 | ⬜ | MODIS `bright_t31` / VIIRS `bright_ti5` | K (FIRMS web servisi adı: Brightness_2) |
-| 15 | `scan` | float32 | ⬜ | `scan` | piksel boyutu, km |
-| 16 | `track` | float32 | ⬜ | `track` | piksel boyutu, km |
+| 10 | `confidence` | string | ✅ | `confidence` | **original value, as is**: MODIS `"0"`–`"100"`, VIIRS `"l"`/`"n"`/`"h"` |
+| 11 | `confidence_class` | category | ✅ | derived | `low` \| `nominal` \| `high` — MODIS: <30 / 30–79 / ≥80 (**project rule**, FIRMS gives no numeric threshold) |
+| 12 | `version` | string | ✅ | `version` | e.g. `6.1`, `6.1NRT`, `2.0NRT`; mock data: `MOCK` |
+| 13 | `brightness` | float32 | ⬜ | MODIS `brightness` / VIIRS `bright_ti4` | K. **Not comparable between the two instruments** (different channel/resolution) |
+| 14 | `brightness_2` | float32 | ⬜ | MODIS `bright_t31` / VIIRS `bright_ti5` | K (FIRMS web service name: Brightness_2) |
+| 15 | `scan` | float32 | ⬜ | `scan` | pixel size, km |
+| 16 | `track` | float32 | ⬜ | `track` | pixel size, km |
 | 17 | `frp` | float32 | ⬜ | `frp` | MW |
 | 18 | `daynight` | category | ⬜ | `daynight` | `D` \| `N` |
-| 19 | `type` | Int8 | ⬜ | `type` (sadece archive) | 0 bitki yangını (varsayılan), 1 volkan, 2 statik kaynak, 3 deniz; NRT'de boş |
-| 20 | `source` | category | ✅ | dosya adı | `archive` \| `nrt` |
-| 21 | `region` | string | ✅ | `data/raw/<region>/` klasör adı | indirme alanı slug'ı (§5) |
-| 22 | `weight_harm` | float32 | ⬜ | P2 | **ingest'te NaN**; P2 çıktısında dolu, ≥ 0 (§6) |
+| 19 | `type` | Int8 | ⬜ | `type` (archive only) | 0 vegetation fire (default), 1 volcano, 2 static source, 3 offshore; empty in NRT |
+| 20 | `source` | category | ✅ | file name | `archive` \| `nrt` |
+| 21 | `region` | string | ✅ | `data/raw/<region>/` folder name | download area slug (§5) |
+| 22 | `weight_harm` | float32 | ⬜ | P2 | **NaN at ingest**; filled in P2 output, ≥ 0 (§6) |
 
-- **Zorunlu** = sütun var VE boş değer yok. **⬜** = sütun var ama boş olabilir.
-- Sütun sırası tablodaki gibi. Ekstra sütun yok (gerekirse P4'e sor → sözleşmeye eklenir).
-- **Açık karar — `sensor` sütunu:** şimdilik yok; `instrument` (sensör ailesi) + `satellite`
-  (platform) her veri akışını tekil tanımlıyor. İbrahim'in yeni veri setleri gelince yeniden bakılacak.
+- **Required** = column exists AND has no missing values. **⬜** = column exists but may be empty.
+- Column order as in the table. No extra columns (if needed, ask P4 → added to the contract).
+- **Open decision — `sensor` column:** none for now; `instrument` (sensor family) + `satellite`
+  (platform) uniquely identify every data stream. To be revisited when İbrahim's new datasets arrive.
 
-## 2. Eksik değerler
-- Sayısal → `NaN`; `type` → `<NA>`; metin → `<NA>` (boş string `""` YASAK).
-- Zorunlu alanı (`latitude, longitude, acq_date, acq_time, satellite`) okunamayan satır **atılır**
-  ve sayısı ingest özetinde yazılır. Başka hiçbir sebeple satır atılmaz.
-- Bilinmeyen `satellite` kodu ya da beklenmeyen sütun yapısı → `ValueError` (sessiz atma yok).
+## 2. Missing values
+- Numeric → `NaN`; `type` → `<NA>`; text → `<NA>` (empty string `""` is FORBIDDEN).
+- A row whose required field (`latitude, longitude, acq_date, acq_time, satellite`) cannot be read **is dropped**
+  and the count is written in the ingest summary. No row is dropped for any other reason.
+- Unknown `satellite` code or unexpected column structure → `ValueError` (no silent dropping).
 
-## 3. Uydu / enstrüman adları
-| FIRMS kodu | `satellite` | `instrument` | Veri başlangıcı (yaklaşık) |
+## 3. Satellite / instrument names
+| FIRMS code | `satellite` | `instrument` | Data start (approximate) |
 |---|---|---|---|
 | `Terra`, `T` | Terra | MODIS | 2000-11 |
 | `Aqua`, `A` | Aqua | MODIS | 2002-07 |
-| `SNPP`, `N` | SNPP | VIIRS | 2012-01 — **2026-11-02'de veri akışı durdu** (FIRMS duyurusu, veride doğrulandı) |
+| `SNPP`, `N` | SNPP | VIIRS | 2012-01 — **data stream stopped on 2026-11-02** (FIRMS announcement, verified in the data) |
 | `N20`, `1` | NOAA20 | VIIRS | 2018-04 |
-| `N21`, `2` | NOAA21 | VIIRS | **2023-03-01** (veride doğrulandı) |
+| `N21`, `2` | NOAA21 | VIIRS | **2023-03-01** (verified in the data) |
 
-Gerçek ilk/son tarihleri P1 veriden çıkarır → `data/satellite_coverage.csv` (§7.1).
-Uygulama tarihleri sabit yazmaz, `query.data_info()["satellite_ranges"]`'ten alır.
+P1 derives the real first/last dates from the data → `data/satellite_coverage.csv` (§7.1).
+The app does not hard-code dates; it takes them from `query.data_info()["satellite_ranges"]`.
 
-**Enstrüman = `SATELLITE_INSTRUMENT[satellite]`** (uydu kodundan). Sütun adından çıkarılmaz, çünkü
-iki indirme biçiminde VIIRS sütun adları farklı (P1 gerçek başlıklarla doğruladı):
+**Instrument = `SATELLITE_INSTRUMENT[satellite]`** (from the satellite code). It is not inferred from the column name, because
+the VIIRS column names differ between the two download formats (P1 verified with the real headers):
 
-| Biçim | VIIRS parlaklık sütunları | MODIS | `satellite` (VIIRS) | `version` |
+| Format | VIIRS brightness columns | MODIS | `satellite` (VIIRS) | `version` |
 |---|---|---|---|---|
-| DL_FIRE indirme aracı (`fire_archive_*`, `fire_nrt_*`) | `brightness`, `bright_t31` | `brightness`, `bright_t31` | `SNPP`, `N20`, `N21` | `2`, `2.0NRT` (MODIS `6.2`, `6.1NRT`) |
-| Ülke-yıl dosyası (`viirs-snpp_2020_Belgium.csv`) | `bright_ti4`, `bright_ti5` | `brightness`, `bright_t31` | `N`, `N20` | — |
+| DL_FIRE download tool (`fire_archive_*`, `fire_nrt_*`) | `brightness`, `bright_t31` | `brightness`, `bright_t31` | `SNPP`, `N20`, `N21` | `2`, `2.0NRT` (MODIS `6.2`, `6.1NRT`) |
+| Country-year file (`viirs-snpp_2020_Belgium.csv`) | `bright_ti4`, `bright_ti5` | `brightness`, `bright_t31` | `N`, `N20` | — |
 
-İkisi de `brightness` / `brightness_2`'ye eşlenir. `confidence` biçimi (sayı ↔ l/n/h) enstrümanla
-çapraz kontrol edilir. **Ülke-yıl dosyaları kullanılmaz** (2026 ve NOAA-21 yok, §5).
+Both are mapped to `brightness` / `brightness_2`. The `confidence` format (number ↔ l/n/h) is
+cross-checked against the instrument. **Country-year files are not used** (no 2026 and no NOAA-21, §5).
 
-## 4. Tekrarlar ve archive/NRT çakışması
-**4a. Birebir tekrar** (aynı dosya ya da aynı kaynaktan iki kez indirme):
-anahtar `(satellite, datetime_utc, round(latitude,4), round(longitude,4))` → ilki kalır.
-- Farklı uydu **veya** farklı zaman = farklı gözlem, ASLA birleştirilmez.
-- Aynı geçişte komşu pikseller farklı koordinattadır → ayrı satır kalır (bunlar meşru gözlemlerdir).
+## 4. Duplicates and archive/NRT overlap
+**4a. Exact duplicate** (same file, or downloaded twice from the same source):
+key `(satellite, datetime_utc, round(latitude,4), round(longitude,4))` → the first one is kept.
+- Different satellite **or** different time = different observation, NEVER merged.
+- Neighboring pixels in the same overpass have different coordinates → they remain separate rows (these are legitimate observations).
 
-**4b. archive ↔ NRT**: NRT ve archive aynı tespiti **biraz farklı konumla** verir
-(NRT hızlı işlenir), bu yüzden nokta-nokta eşleştirme güvenilmez → çift sayım riski.
-Kural: her **(`region`, `satellite`)** için `cutoff = o bölgenin archive'indeki en son acq_date`;
-o bölge-uydunun `acq_date ≤ cutoff` olan **tüm NRT satırları atılır**, sonrası kalır.
-Bölge bazında, çünkü bölgelerin archive'i farklı tarihte bitebilir; ortak cutoff bir bölgenin
-NRT verisini haksız yere silerdi (P1 bulgusu, v1.2). Bölgeler çakışmadığı için çift sayım olmaz.
-P1 her bölge-uydu için cutoff'u ve atılan NRT satır sayısını `satellite_coverage.csv`'ye yazar.
+**4b. archive ↔ NRT**: NRT and archive report the same detection **at a slightly different location**
+(NRT is processed quickly), so point-to-point matching is unreliable → risk of double counting.
+Rule: for each **(`region`, `satellite`)**, `cutoff = the latest acq_date in that region's archive`;
+**all NRT rows** of that region-satellite with `acq_date ≤ cutoff` **are dropped**, later ones are kept.
+Per region, because the regions' archives may end on different dates; a shared cutoff would wrongly delete
+one region's NRT data (P1 finding, v1.2). Since regions do not overlap, there is no double counting.
+P1 writes the cutoff and the number of dropped NRT rows for each region-satellite to `satellite_coverage.csv`.
 
-## 5. Bölge (region) adları
-- Kaynak: **FIRMS indirme aracı (DL_FIRE)**, 4 kaynak (MODIS C6.1, VIIRS S-NPP, NOAA-20, NOAA-21),
-  archive + NRT, 2000-11 → bugün. Takımın Drive arşivi bu biçimde.
-- **FIRMS ülke-YIL dosyaları kullanılmaz:** son yıl 2025 (2026 yok) ve NOAA-21 yok → Hohes Venn
-  Ağustos 2026 ve 2023 NOAA-21 sıçraması kaybolur.
-- Slug: `^[a-z0-9_]+$`. Klasör adı = değer: `data/raw/aachen_eifel/*.csv` → `region="aachen_eifel"`.
-- İndirme alanları **çakışmaz** (`contract.REGIONS`):
-  - `argentina` — ülke (La Rioja + P2 eğitimi)
+## 5. Region names
+- Source: **FIRMS download tool (DL_FIRE)**, 4 sources (MODIS C6.1, VIIRS S-NPP, NOAA-20, NOAA-21),
+  archive + NRT, 2000-11 → today. The team's Drive archive is in this format.
+- **FIRMS country-YEAR files are not used:** the last year is 2025 (no 2026) and there is no NOAA-21 → Hohes Venn
+  August 2026 and the 2023 NOAA-21 jump would be lost.
+- Slug: `^[a-z0-9_]+$`. Folder name = value: `data/raw/aachen_eifel/*.csv` → `region="aachen_eifel"`.
+- Download areas **do not overlap** (`contract.REGIONS`):
+  - `argentina` — country (La Rioja + P2 training)
   - `aachen_eifel` — bbox `5.96, 50.44, 6.44, 50.83` (lon_min, lat_min, lon_max, lat_max).
-    Hohes Venn dahil, Belçika tarafı da içinde (sınır değil kutu).
-- `region` uygulamada filtre değildir: uygulama **koordinatla** filtreler (`query.PRESETS`).
-  `PRESETS["Aachen/Eifel"]` = indirme kutusu (verinin olmadığı alanı göstermesin diye).
+    Includes the Hohes Venn, the Belgian side is inside too (a box, not a border).
+- `region` is not a filter in the app: the app filters **by coordinates** (`query.PRESETS`).
+  `PRESETS["Aachen/Eifel"]` = the download box (so it does not show an area without data).
 
 ## 6. `weight_harm`
-- **Anlam (sözleşme):** herhangi bir satır kümesi için `Σ weight_harm` = o kümenin
-  harmonize (MODIS-eşdeğeri) tespit sayısı **tahmini**. Değerler ≥ 0.
-- **Ingest (P1):** `NaN` — "henüz harmonize edilmedi". (1.0 değil: 1.0 olsaydı harmonize mod
-  sessizce ham sayıyı gösterirdi.)
-- **Harmonize (P2):** hiç NaN yok. **Yöntemi P2 belirler** ve `pipeline/harmonize.py` başında
-  yazar. Başlangıç önerisi (Yöntem A): MODIS satırları VIIRS döneminden önce 1, sonra 0;
-  VIIRS satırları `k / aktif_VIIRS_uydu_sayısı`, `k = MODIS / VIIRS` (Arjantin 2012–2021).
-  Aktif uydu sayısı başlangıç **ve bitiş** tarihlerine göre (SNPP 2026-11-02'de bitti).
-- Yöntem A **doğrulanmamış bir hipotezdir**; P3 metriklerinden önce "doğru" diye sunulmaz.
+- **Meaning (contract):** for any set of rows, `Σ weight_harm` = an **estimate** of that set's
+  harmonized (MODIS-equivalent) detection count. Values ≥ 0.
+- **Ingest (P1):** `NaN` — "not harmonized yet". (Not 1.0: with 1.0 the harmonized mode
+  would silently show the raw count.)
+- **Harmonized (P2):** no NaN at all. **P2 decides the method** and documents it at the top of
+  `pipeline/harmonize.py`. Initial proposal (Method A): MODIS rows 1 before the VIIRS period, 0 after;
+  VIIRS rows `k / active_VIIRS_satellite_count`, `k = MODIS / VIIRS` (Argentina 2012–2021).
+  The number of active satellites follows the start **and end** dates (SNPP ended on 2026-11-02).
+- Method A is **an unverified hypothesis**; it is not presented as "correct" before the P3 metrics.
 
-## 7. Pipeline arayüzleri
-Tüm script'ler repo kökünden: `python pipeline/<ad>.py`. Hepsi `main()` + `if __name__ == "__main__"`.
+## 7. Pipeline interfaces
+All scripts are run from the repo root: `python pipeline/<name>.py`. All have `main()` + `if __name__ == "__main__"`.
 
 ### 7.1 `pipeline/ingest.py` (P1)
 | | |
 |---|---|
-| Girdi | `data/raw/<region>/*.csv` — DL_FIRE: archive (`fire_archive_*`), NRT (`fire_nrt_*`) |
-| Çıktı | `data/hotspots.parquet` — §1 şeması, `validate_hotspots(df, "ingest")` geçer |
-| Çıktı | `data/satellite_coverage.csv` — `region, satellite, source, first_date, last_date, n_rows, nrt_cutoff, n_nrt_dropped` (her bölge × uydu × kaynak bir satır) |
-| stdout | uydu × yıl satır sayısı, atılan satırlar (sebep bazında) |
+| Input | `data/raw/<region>/*.csv` — DL_FIRE: archive (`fire_archive_*`), NRT (`fire_nrt_*`) |
+| Output | `data/hotspots.parquet` — §1 schema, passes `validate_hotspots(df, "ingest")` |
+| Output | `data/satellite_coverage.csv` — `region, satellite, source, first_date, last_date, n_rows, nrt_cutoff, n_nrt_dropped` (one row per region × satellite × source) |
+| stdout | row counts per satellite × year, dropped rows (by reason) |
 
 ### 7.2 `pipeline/harmonize.py` (P2)
 | | |
 |---|---|
-| Girdi | `data/hotspots.parquet`, `data/satellite_coverage.csv` |
-| Çıktı | `data/hotspots_harm.parquet` — §1 şeması, `validate_hotspots(df, "harm")` geçer |
-| Çıktı | `data/monthly_grid.parquet` — aşağıda |
-| Çıktı | `data/k_factors.csv` — en az `k, n_modis, n_viirs, fallback` + P2'nin seçtiği tabaka sütunları |
+| Input | `data/hotspots.parquet`, `data/satellite_coverage.csv` |
+| Output | `data/hotspots_harm.parquet` — §1 schema, passes `validate_hotspots(df, "harm")` |
+| Output | `data/monthly_grid.parquet` — see below |
+| Output | `data/k_factors.csv` — at least `k, n_modis, n_viirs, fallback` + the stratum columns P2 chooses |
 
 `monthly_grid.parquet`:
-| Sütun | dtype | Not |
+| Column | dtype | Note |
 |---|---|---|
-| `cell_lat`, `cell_lon` | float64 | 0.25° hücre merkezi: `floor(x/0.25)*0.25 + 0.125` |
+| `cell_lat`, `cell_lon` | float64 | 0.25° cell center: `floor(x/0.25)*0.25 + 0.125` |
 | `year` | int16 | |
 | `month` | int8 | |
 | `region` | string | |
-| `n_terra`, `n_aqua`, `n_snpp`, `n_noaa20`, `n_noaa21` | int32 | ham sayı, uydu başına |
-| `n_modis`, `n_viirs` | int32 | toplamlar |
+| `n_terra`, `n_aqua`, `n_snpp`, `n_noaa20`, `n_noaa21` | int32 | raw count, per satellite |
+| `n_modis`, `n_viirs` | int32 | totals |
 | `n_harm` | float64 | `Σ weight_harm` |
-Sadece en az bir tespiti olan hücre-aylar yazılır (eksik = 0).
+Only cell-months with at least one detection are written (missing = 0).
 
 ### 7.3 `pipeline/validate.py` (P3)
 | | |
 |---|---|
-| Girdi | `data/monthly_grid.parquet`, `data/hotspots_harm.parquet`, `data/k_factors.csv` (yoksa `data/hotspots.parquet` → sadece ham sayımlar) |
-| Çıktı | `docs/validation/metrics.json` — `[{"data","method","region","split","scale","r2","bias","bias_pct","n"}]` |
-| Çıktı | `docs/validation/*.png` — `pred_vs_true.png`, `annual_raw_vs_harm.png`, `venn_check.png` |
-| Çıktı | `docs/validation/summary.md` — İbrahim için 3 cümlelik özet + yıl yıl test dökümü |
-| Bölünme | eğitim 2012–2021, test 2022–2024 |
+| Input | `data/monthly_grid.parquet`, `data/hotspots_harm.parquet`, `data/k_factors.csv` (if missing, `data/hotspots.parquet` → raw counts only) |
+| Output | `docs/validation/metrics.json` — `[{"data","method","region","split","scale","r2","bias","bias_pct","n"}]` |
+| Output | `docs/validation/*.png` — `pred_vs_true.png`, `annual_raw_vs_harm.png`, `venn_check.png` |
+| Output | `docs/validation/summary.md` — 3-sentence summary for İbrahim + year-by-year test breakdown |
+| Split | training 2012–2021, test 2022–2024 |
 
-`metrics.json` alan değerleri:
-| Alan | İzinli değerler |
+`metrics.json` field values:
+| Field | Allowed values |
 |---|---|
-| `data` | `"mock"` (sentetik) \| `"raw"` (P1, harmonize yok) \| `"harm"` (P2 çıktısı) |
-| `method` | `"harm"` (harmonize) \| `"raw_viirs"` (harmonizasyonsuz karşılaştırma) |
-| `split` | `"train"` (2012–2021) \| `"test"` (2022–2024) \| `"test_2022"` (NOAA-21 öncesi) \| `"test_2023-2024"` (NOAA-21 aktif, eğitimde olmayan uydu) \| `"transfer_2012-2026"` (sadece `aachen_eifel`: k yalnız Arjantin'den öğrenildiği için tüm VIIRS yılları örneklem dışı; 2022–24 testi bu bölgede çok küçük) |
-| `region` | `contract.REGIONS` anahtarları |
+| `data` | `"mock"` (synthetic) \| `"raw"` (P1, not harmonized) \| `"harm"` (P2 output) |
+| `method` | `"harm"` (harmonized) \| `"raw_viirs"` (comparison without harmonization) |
+| `split` | `"train"` (2012–2021) \| `"test"` (2022–2024) \| `"test_2022"` (before NOAA-21) \| `"test_2023-2024"` (NOAA-21 active, a satellite not in training) \| `"transfer_2012-2026"` (`aachen_eifel` only: since k is learned only from Argentina, all VIIRS years are out-of-sample; the 2022–24 test is very small in this region) |
+| `region` | `contract.REGIONS` keys |
 
-**Repoya sadece `data = "harm"` olan çıktılar commit'lenir.** Sentetik ya da ham veriden üretilen
-metrikler sunuma ve README'ye girmez.
+**Only outputs with `data = "harm"` are committed to the repo.** Metrics produced from synthetic or raw data
+do not go into the presentation or the README.
 
-### 7.4 `app/query.py` (P4) — P5 sadece bunu kullanır
+### 7.4 `app/query.py` (P4) — P5 uses only this
 ```python
 PRESETS: dict[str, tuple[float, float, float, float]]
-    # görüntüleme kutuları: "Hohes Venn", "Aachen/Eifel", "La Rioja (AR)"
+    # display boxes: "Hohes Venn", "Aachen/Eifel", "La Rioja (AR)"
 MONTH_LABELS: list[str]                   # ["Oca", …, "Ara"]
 
 data_info() -> dict
     # {"path": str, "is_mock": bool, "has_harm": bool, "start": Timestamp, "end": Timestamp,
     #  "n_rows": int, "satellites": list[str],
-    #  "satellite_ranges": {uydu: (ilk_tarih, son_tarih)},   ← v1.2, uydu değişim çizgileri için
+    #  "satellite_ranges": {satellite: (first_date, last_date)},   ← v1.2, for the satellite-change lines
     #  "contract": "1.5"}
 
 get_hotspots(geom, start=None, end=None, harmonized=False) -> pd.DataFrame
-    # geom: PRESETS adı | (lon_min, lat_min, lon_max, lat_max) | GeoJSON Feature/Polygon/MultiPolygon
-    # start/end: tarih benzeri, dahil, UTC; harmonized=True → sadece weight_harm > 0
-    # dönüş: §1 sütunları (aynı dtype'lar), 0 satır olabilir
+    # geom: PRESETS name | (lon_min, lat_min, lon_max, lat_max) | GeoJSON Feature/Polygon/MultiPolygon
+    # start/end: date-like, inclusive, UTC; harmonized=True → only weight_harm > 0
+    # returns: §1 columns (same dtypes), may have 0 rows
 
 monthly_matrix(df, mode="raw", start=None, end=None) -> pd.DataFrame
-    # start/end = get_hotspots'a verilen tarih filtresinin aynısı → aralık dışı aylar NaN (v1.3, geriye uyumlu)
-    # index "year" (int, veri kapsamındaki tüm yıllar), columns "month" 1..12, float64
-    # raw: satır sayısı (tüm uydular) | harm: Σ weight_harm
-    # kapsam dışı ay → NaN; kapsam içinde tespit yok → 0; harmonize veri yoksa harm → tamamen NaN
+    # start/end = the same date filter given to get_hotspots → months outside the range NaN (v1.3, backward compatible)
+    # index "year" (int, all years within the data coverage), columns "month" 1..12, float64
+    # raw: row count (all satellites) | harm: Σ weight_harm
+    # month outside coverage → NaN; within coverage with no detections → 0; if there is no harmonized data, harm → entirely NaN
 
 anomaly(matrix, year, month) -> dict
     # {"value": float, "mean": float, "std": float, "z": float, "rank": int|None,
     #  "n_years": int, "label": str}
-    # taban = aynı takvim ayının diğer yılları; rank 1 = en yüksek
-    # label: "çok yüksek" (z>2) | "yüksek" (z>1) | "normal" | "düşük" (z<-1) | "tespit yok" | "veri yok"
+    # baseline = the other years of the same calendar month; rank 1 = highest
+    # label: "çok yüksek" (very high; z>2) | "yüksek" (high; z>1) | "normal" | "düşük" (low; z<-1) | "tespit yok" (no detections) | "veri yok" (no data)
 
-to_csv_bytes(df) -> bytes                 # UTF-8; index adı varsa index de yazılır
+to_csv_bytes(df) -> bytes                 # UTF-8; if the index has a name, the index is written too
 
-forecast(geom) -> dict | None             # v1.5, DENEYSEL (§7.5). Sadece mode="model" (Arjantin); yoksa None
-seasonal_outlook(geom) -> dict | None     # v1.5: model bölgesinde forecast() ile aynı; değilse mode="seasonal"; veri yoksa None
-    # ortak sözlük:
-    # "mode": "model"    → bölgede Arjantin görünüm hücresi var: test edilmiş 30 günlük görünüm
-    #         "seasonal" → hücre yok ama veri var (ör. Hohes Venn): TAHMİN YOK, pred = mevsimsel normal
-    # {"start", "end", "data_through": Timestamp,   30 günlük pencere (ör. 2026-11-15 → 12-14)
-    #  "pred", "p10", "p90": float,   model: beklenen + %80 aralık (test hatalarından); seasonal: normal + geçmiş yıllar %10–90
-    #  "normal": float,               aynı pencerenin son 10 yıl ortalaması (MODIS-eşd.)
-    #  "ratio": float (seasonal: NaN), "label": model → "below normal" (≤1/1,5×) | "near normal" | "above normal";
+forecast(geom) -> dict | None             # v1.5, EXPERIMENTAL (§7.5). Only mode="model" (Argentina); otherwise None
+seasonal_outlook(geom) -> dict | None     # v1.5: in the model region same as forecast(); otherwise mode="seasonal"; None if there is no data
+    # shared dict:
+    # "mode": "model"    → the region has an Argentina outlook cell: tested 30-day outlook
+    #         "seasonal" → no cell but there is data (e.g. Hohes Venn): NO FORECAST, pred = seasonal normal
+    # {"start", "end", "data_through": Timestamp,   30-day window (e.g. 2026-11-15 → 12-14)
+    #  "pred", "p10", "p90": float,   model: expected + 80% interval (from test errors); seasonal: normal + past years 10–90%
+    #  "normal": float,               mean of the same window over the last 10 years (MODIS-equiv.)
+    #  "ratio": float (seasonal: NaN), "label": model → "below normal" (≤1/1.5×) | "near normal" | "above normal";
     #                                          seasonal → "quiet season" (normal < 1) | "seasonal normal",
-    #  "history": Series yıl → aynı 30 günlük penceredeki tespit (geçmiş yıllar),
-    #  "profile": Series takvim ayı 1..12 → son 10 tam yılın aylık normali (get_hotspots + monthly_matrix),
+    #  "history": Series year → detections in the same 30-day window (past years),
+    #  "profile": Series calendar month 1..12 → monthly normal of the last 10 full years (get_hotspots + monthly_matrix),
     #  "n_cells", "skill", "direction_hit_rate", "backtest_years" (seasonal: 0 / None),
-    #  "years_with_detections", "n_years" (sadece seasonal), "cells": DataFrame (§7.5 + "ratio"; seasonal: boş)}
-    # hücre seçimi: 1° hücre MERKEZİ geom içinde; model değerleri hotspot dosyasından bağımsız
+    #  "years_with_detections", "n_years" (seasonal only), "cells": DataFrame (§7.5 + "ratio"; seasonal: empty)}
+    # cell selection: 1° cell CENTER inside geom; model values are independent of the hotspot file
 ```
-Veri dosyası önceliği: `$HOTSPOTS_PATH` → `data/hotspots_harm.parquet` → `data/hotspots.parquet`
+Data file priority: `$HOTSPOTS_PATH` → `data/hotspots_harm.parquet` → `data/hotspots.parquet`
 → `data/deploy/hotspots_deploy.parquet` → `data/mock/hotspots_mock.parquet`.
 
-### 7.5 `pipeline/forecast.py` (P4) — DENEYSEL 30 günlük tespit görünümü (v1.5)
+### 7.5 `pipeline/forecast.py` (P4) — EXPERIMENTAL 30-day detection outlook (v1.5)
 | | |
 |---|---|
-| Girdi | `data/hotspots_harm.parquet` (sadece `argentina`, günlük Σ `weight_harm`) — sadece NASA FIRMS |
-| Çıktı | `data/deploy/forecast.parquet` — aşağıda (küçük, git'e girer) |
-| Çıktı | `data/deploy/forecast_history.parquet` — `cell_lat`, `cell_lon` float64, `year` int16, `detections` float64: aynı 30 günlük pencerenin geçmiş yıllardaki Σ `weight_harm` (grafik) |
-| Çıktı | `docs/forecast/metrics.json`, `backtest.png`, `summary.md` |
-| Yöntem | P2 Bahtiyar'ın normal + kalıcılık modeli, 30 günlük kayan pencere: `log1p(hedef) = normal + a·hücre sapması + b·bölge sapması`; girdi penceresi hedeften 2 gün önce biter. Bölge toplamı = oran × son 10 yılın aritmetik normali (log toplamı −%24 yanlıydı) |
-| Test | 2015–2025, her ayın 15'i (132 başlangıç), her yıl yalnızca önceki yıllarla; beceri = 1 − MSE_model/MSE_normal |
+| Input | `data/hotspots_harm.parquet` (`argentina` only, daily Σ `weight_harm`) — NASA FIRMS only |
+| Output | `data/deploy/forecast.parquet` — see below (small, goes into git) |
+| Output | `data/deploy/forecast_history.parquet` — `cell_lat`, `cell_lon` float64, `year` int16, `detections` float64: Σ `weight_harm` of the same 30-day window in past years (chart) |
+| Output | `docs/forecast/metrics.json`, `backtest.png`, `summary.md` |
+| Method | P2 Bahtiyar's normal + persistence model, 30-day sliding window: `log1p(target) = normal + a·cell deviation + b·region deviation`; the input window ends 2 days before the target. Region total = ratio × arithmetic normal of the last 10 years (the log sum was biased by −24%) |
+| Test | 2015–2025, the 15th of each month (132 start dates), each year using only earlier years; skill = 1 − MSE_model/MSE_normal |
 
-`forecast.parquet` (tek 30 günlük pencere):
-| Sütun | dtype | Not |
+`forecast.parquet` (a single 30-day window):
+| Column | dtype | Note |
 |---|---|---|
-| `cell_lat`, `cell_lon` | float64 | 1° hücre merkezi: `floor(x) + 0.5` |
-| `start`, `end` | datetime64[ns] | hedef penceresi (dahil), `end = start + 29 gün` |
-| `expected_geo` | float64 | `expm1(log tahmini)`, ≥ 0 — sadece ORAN için; toplanırsa düşük verir |
+| `cell_lat`, `cell_lon` | float64 | 1° cell center: `floor(x) + 0.5` |
+| `start`, `end` | datetime64[ns] | target window (inclusive), `end = start + 29 days` |
+| `expected_geo` | float64 | `expm1(log forecast)`, ≥ 0 — only for the RATIO; if summed it comes out too low |
 | `normal_geo` | float64 | `expm1(log normal)`, ≥ 0 |
-| `normal` | float64 | aynı pencerenin son 10 yıl aritmetik ortalaması (MODIS-eşd. tespit), ≥ 0 |
+| `normal` | float64 | arithmetic mean of the same window over the last 10 years (MODIS-equiv. detections), ≥ 0 |
 | `region` | string | `argentina` |
-| `data_through` | datetime64[ns] | kullanılan son tam gün (son NRT günü atlanır) |
+| `data_through` | datetime64[ns] | last full day used (the last NRT day is skipped) |
 
-Görünüm bir **tespit sayısı** görünümüdür, yangın tahmini değildir (§8); "deneysel" etiketiyle ve test
-sayılarıyla sunulur. Uç olayları önceden göremez. NASA POWER hava ve NASA MERRA-2 El Niño göstergesi denendi,
-iyileştirmedi (dal `p4/forecast-experiments`).
+The outlook is a **detection count** outlook, not a fire forecast (§8); it is presented with the "experimental" label and the test
+figures. It cannot foresee extreme events. NASA POWER weather and the NASA MERRA-2 El Niño indicator were tried
+and did not improve it (branch `p4/forecast-experiments`).
 
-### 7.6 `pipeline/weather_power.py` (P1) — NASA POWER aylık hava (v1.5, isteğe bağlı girdi)
+### 7.6 `pipeline/weather_power.py` (P1) — NASA POWER monthly weather (v1.5, optional input)
 | | |
 |---|---|
-| Girdi | `data/hotspots.parquet` (`argentina` 1° hücreleri) + NASA POWER daily point API (PRECTOTCORR, T2M_MAX, RH2M) |
-| Çıktı | `data/weather_power.parquet` (git dışı, ~2 MB); ham yanıtlar `data/raw/power/` |
-| Kullanan | — (deneyde test edildi, §7.5; dal `p4/forecast-experiments`) |
+| Input | `data/hotspots.parquet` (`argentina` 1° cells) + NASA POWER daily point API (PRECTOTCORR, T2M_MAX, RH2M) |
+| Output | `data/weather_power.parquet` (not in git, ~2 MB); raw responses `data/raw/power/` |
+| Used by | — (tested in the experiment, §7.5; branch `p4/forecast-experiments`) |
 
-| Sütun | dtype | Not |
+| Column | dtype | Note |
 |---|---|---|
-| `cell_lat`, `cell_lon` | float64 | 1° hücre merkezi `floor(x) + 0.5` (§7.5 ile aynı) |
+| `cell_lat`, `cell_lon` | float64 | 1° cell center `floor(x) + 0.5` (same as §7.5) |
 | `year` | int16 | |
 | `month` | int8 | |
-| `prec_mm` | float64 | aylık TOPLAM yağış, mm |
-| `tmax_c` | float64 | günlük maks. sıcaklıkların aylık ortalaması, °C |
-| `rh_pct` | float64 | aylık ortalama bağıl nem, % |
-| `n_days` | int16 | geçerli gün sayısı; içinde bulunulan ay kısmi  |
+| `prec_mm` | float64 | monthly TOTAL precipitation, mm |
+| `tmax_c` | float64 | monthly mean of the daily max. temperatures, °C |
+| `rh_pct` | float64 | monthly mean relative humidity, % |
+| `n_days` | int16 | number of valid days; the current month is partial  |
 
-Değer hücre ortalaması değil, hücre merkezini içeren MERRA-2 kutusunun (0,5° × 0,625°) değeri; günler POWER'ın
-yerel güneş zamanı (LST), FIRMS gibi UTC değil. **14 Kas sonucu:** test hatası %45 → %47, önceden konan kabul
-eşiği (< %34) sağlanmadı; 30 günlük modelde de beceri 0,238 → 0,239 → görünüm modelinde KULLANILMIYOR.
+The value is not a cell mean but the value of the MERRA-2 box (0.5° × 0.625°) that contains the cell center; days are in POWER's
+local solar time (LST), not UTC like FIRMS. **Result of 14 Nov:** test error 45% → 47%, the acceptance threshold set in advance
+(< 34%) was not met; in the 30-day model the skill also went 0.238 → 0.239 → NOT USED in the outlook model.
 
-## 8. Terminoloji (uygulama, slayt, proje sayfası)
-| Doğru | Yanlış |
+## 8. Terminology (app, slides, project page)
+| Correct | Wrong |
 |---|---|
-| "aktif yangın tespiti", "termal anomali", "hotspot" | "yangın" (tek satır için) |
-| "Hohes Venn'de bilinen yangın olaylarıyla **örtüşen** tespit artışı" | "uygulama yangını tespit etti" |
-| "harmonize (MODIS-eşdeğeri) tahmin" | "gerçek yangın sayısı" |
-| "k katsayısı: Arjantin'de kalibre edildi, test 2022–2024: R²=…" | "doğrulanmış dönüşüm katsayısı" |
+| "active fire detection", "thermal anomaly", "hotspot" | "fire" (for a single row) |
+| "a rise in detections **coinciding** with known fire events in the Hohes Venn" | "the app detected a fire" |
+| "harmonized (MODIS-equivalent) estimate" | "actual number of fires" |
+| "k factor: calibrated in Argentina, test 2022–2024: R²=…" | "validated conversion factor" |
 
-Anomali etiketleri **tespit sayısı** anomalisidir, yangın olayı sınıflandırması değildir.
+Anomaly labels are anomalies of the **detection count**, not a classification of fire events.
 
-## 9. Sahte veri
-`data/mock/hotspots_mock.parquet`, `data/mock/make_mock.py` ile üretilir. Her satırda
-`version = "MOCK"` → CSV dışa aktarımında da sentetik olduğu görünür. `data_info()["is_mock"]`
-True ise uygulama "SENTETİK TEST VERİSİ" uyarısı gösterir. Bilimsel değeri yoktur.
+## 9. Mock data
+`data/mock/hotspots_mock.parquet` is generated by `data/mock/make_mock.py`. Every row has
+`version = "MOCK"` → its synthetic nature is visible in CSV exports too. If `data_info()["is_mock"]`
+is True, the app shows a "SYNTHETIC TEST DATA" warning. It has no scientific value.
 
-## Değişiklik günlüğü
-| Sürüm | Değişiklik | Etkilenen |
+## Changelog
+| Version | Change | Affected |
 |---|---|---|
-| 1.0 | İlk şema (CLAUDE.md §3) | herkes |
-| 1.1 | `sensor` açık karar olarak işaretlendi; `lat/lon` → `latitude/longitude`; `bright` → `brightness`; `brightness_2` eklendi; `confidence` artık **orijinal değer** (eski `confidence_raw`), sınıf → `confidence_class`; `fire_type` → `type`; yeni: `datetime_utc`, `version`, `region`; archive/NRT kuralı uydu bazlı tarih kesimine çevrildi; `satellite_coverage.csv` eklendi; `weight_harm` yöntemi P2'ye devredildi; `contract.py` doğrulayıcı | P1, P2, P3, P5 |
-| 1.2 | P1 gerçek başlık bulguları: enstrüman uydu kodundan (DL_FIRE'da VIIRS de `brightness` kullanıyor), indirme biçimi tablosu; NOAA-21 başlangıcı 2023-03-01; bölgeler = DL_FIRE indirme alanları (`argentina` ülke, `aachen_eifel` bbox), ülke-yıl dosyaları kullanılmaz; archive/NRT cutoff **(region, satellite)** bazında; `satellite_coverage.csv`'ye `region` sütunu; `data_info()["satellite_ranges"]`; `PRESETS["Aachen/Eifel"]` = indirme kutusu; `to_csv_bytes` her OS'ta `\n` | P1, P2, P5, P6 |
-| 1.3 | `metrics.json`'a `data` alanı (mock/raw/harm); `method`, `split` izinli değerleri (P3 önerisi); `summary.md` resmi çıktı; repoya sadece `data="harm"` metrikleri | P3, P6 |
-| 1.4 | `split="transfer_2012-2026"` (sadece aachen_eifel; P3 önerisi) | P3, P6 |
-| 1.5 | DENEYSEL 30 günlük görünüm: `pipeline/forecast.py` (P4, yöntem P2), `data/deploy/forecast.parquet`, `docs/forecast/`, `query.forecast(geom)` (§7.4, §7.5); NASA POWER hava girdisi `pipeline/weather_power.py` (P1, §7.6) test edildi, kullanılmıyor. Sadece NASA verisi. Mevcut API değişmedi | P1, P2, P5, P6 |
+| 1.0 | Initial schema (CLAUDE.md §3) | everyone |
+| 1.1 | `sensor` marked as an open decision; `lat/lon` → `latitude/longitude`; `bright` → `brightness`; `brightness_2` added; `confidence` is now the **original value** (formerly `confidence_raw`), class → `confidence_class`; `fire_type` → `type`; new: `datetime_utc`, `version`, `region`; archive/NRT rule changed to a per-satellite date cutoff; `satellite_coverage.csv` added; `weight_harm` method delegated to P2; `contract.py` validator | P1, P2, P3, P5 |
+| 1.2 | P1 real-header findings: instrument from the satellite code (in DL_FIRE, VIIRS also uses `brightness`), download format table; NOAA-21 start 2023-03-01; regions = DL_FIRE download areas (`argentina` country, `aachen_eifel` bbox), country-year files not used; archive/NRT cutoff per **(region, satellite)**; `region` column in `satellite_coverage.csv`; `data_info()["satellite_ranges"]`; `PRESETS["Aachen/Eifel"]` = download box; `to_csv_bytes` uses `\n` on every OS | P1, P2, P5, P6 |
+| 1.3 | `data` field in `metrics.json` (mock/raw/harm); allowed values for `method`, `split` (P3 proposal); `summary.md` an official output; only `data="harm"` metrics in the repo | P3, P6 |
+| 1.4 | `split="transfer_2012-2026"` (aachen_eifel only; P3 proposal) | P3, P6 |
+| 1.5 | EXPERIMENTAL 30-day outlook: `pipeline/forecast.py` (P4, method P2), `data/deploy/forecast.parquet`, `docs/forecast/`, `query.forecast(geom)` (§7.4, §7.5); NASA POWER weather input `pipeline/weather_power.py` (P1, §7.6) tested, not used. NASA data only. Existing API unchanged | P1, P2, P5, P6 |

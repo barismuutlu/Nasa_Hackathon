@@ -1,51 +1,51 @@
-# P6 veri teslim durumu — güncel DL_FIRE ve tarihsel arşiv
+# P6 data handoff status — current DL_FIRE and historical archive
 
-Cloud kaynağı: `P6_ibrahim.patch`, referans `8d5894c`, 14 Kasım 2026, sözleşme v1.2. Mevcut yerel sözleşme v1.3'tür; DL_FIRE ve ülke-yıl girdilerini dışlama kuralları değişmemiştir.
+Cloud source: `P6_ibrahim.patch`, reference `8d5894c`, 14 November 2026, contract v1.2. The current local contract is v1.3; the rules excluding DL_FIRE and country-year inputs have not changed.
 
-Tarihsel indirme, boyut, SHA-256, ZIP ve Python kontrol sonuçları önceki cloud oturumunun raporudur. CSV ve ZIP dosyaları patch'in içinde değildir; bu Windows çalışma alanında aynı kontroller yeniden çalıştırılmadı. Güncel P1/P4/P5 teslimi aşağıda ayrı kaydedilmiştir. P6 yerel durumu [test_notes.md](test_notes.md) içindedir.
+The historical download, size, SHA-256, ZIP and Python check results are the report of the earlier cloud session. The CSV and ZIP files are not inside the patch; the same checks were not re-run in this Windows workspace. The current P1/P4/P5 submission is recorded separately below. The P6 local status is in [test_notes.md](test_notes.md).
 
-**Önceki v1.1 ülke-yıl teslimi güncel pipeline girdisi değildir.**
-`docs/CONTRACT.md` v1.2 §3 ve §5, ülke-yıl dosyalarını kapsam dışında bırakır.
-Önceki 144 CSV ve ZIP korunmuştur; bu not bunları tarihsel indirme arşivi olarak
-kaydeder. Kaynak `data_download_manifest.csv` de aynı tarihsel arşivi tanımlar.
+**The earlier v1.1 country-year submission is not the current pipeline input.**
+`docs/CONTRACT.md` v1.2 §3 and §5 leave the country-year files out of scope.
+The earlier 144 CSVs and the ZIP have been kept; this note records them as a historical
+download archive. The source `data_download_manifest.csv` also describes the same historical archive.
 
-## Güncel teslim — P1 tarafında tamamlandı
+## Current submission — completed on the P1 side
 
-Kaynak: Süleyman'ın `26fa38d` referanslı mesajı. P1 makinesinde `data/raw/` altında yalnız şu DL_FIRE ZIP girdilerinin bulunduğu ve ülke-yıl CSV'si olmadığı bildirildi:
+Source: Süleyman's message with reference `26fa38d`. It was reported that on the P1 machine, under `data/raw/`, only the following DL_FIRE ZIP inputs are present and there is no country-year CSV:
 
-| Alan | P1'de bildirilen girdi |
+| Area | Input reported on P1 |
 |---|---|
 | argentina | `data/raw/argentina/Argentina-20261114T101801Z-1-001.zip` |
 | aachen_eifel | `data/raw/aachen_eifel/Aachen-Eifel-20261114T101746Z-1-001.zip` |
 
-Dört kaynak, archive + NRT; Aachen/Eifel indirme kutusu `(5.96, 50.44, 6.44, 50.83)`. Çıktı `data/hotspots.parquet`: 7.082.663 satır, 2000-11-01 → 2026-11-13. Barış'ın Drive'dan alıp kontrol ettiği, Yusuf'un gerçek veriyle uygulama testini yaptığı bildirildi. **P1 teslimi tamamdır; bu durum P6 makinesinde tam verinin bulunduğu veya yeniden test edildiği anlamına gelmez.**
+Four sources, archive + NRT; Aachen/Eifel download box `(5.96, 50.44, 6.44, 50.83)`. Output `data/hotspots.parquet`: 7,082,663 rows, 2000-11-01 → 2026-11-13. It was reported that Barış took it from Drive and checked it, and that Yusuf did the app test with real data. **The P1 submission is complete; this does not mean that the full data is present on the P6 machine or that it was re-tested there.**
 
-P1 tam harmonize çıktısında Hohes Venn Nisan 2011=17,0 ve Ağustos 2026=169,2 MODIS-eşdeğeri; Nisan kartı 2001–2026'daki 26 Nisan içinde 1., diğer 25 Nisan ortalaması ≈0,59 ve oran ≈29×. Ayrıntılar [pitch_facts.md](pitch_facts.md) içinde; aktif tespitlerin Ağustos tarihleri 14–17 olarak teyit edildi.
+In the P1 full harmonized output, Hohes Venn April 2011=17.0 and August 2026=169.2 MODIS-equivalent; the April card is 1st among the 26 Aprils in 2001–2026, the mean of the other 25 Aprils ≈0.59 and the ratio ≈29×. Details in [pitch_facts.md](pitch_facts.md); the August dates of the active detections were confirmed as 14–17.
 
-## Tarihsel arşivi ingest girdisinden ayrı tut
+## Keep the historical archive separate from the ingest input
 
-Tarihsel ülke-yıl ZIP'i ve açılmış CSV'leri **`data/raw/` dışında**, örneğin `data/archive/` altında tut; git'e ekleme. Bu belge kapsamında hiçbir ham dosya taşınmadı veya silinmedi. Eski manifest ve paket kaydındaki `data/raw/...` yolları cloud'da bildirilen tarihsel konumlardır; güncel yerleştirme talimatı değildir.
+Keep the historical country-year ZIP and the unpacked CSVs **outside `data/raw/`**, for example under `data/archive/`; do not add them to git. Within the scope of this document no raw file was moved or deleted. The `data/raw/...` paths in the old manifest and package record are the historical locations reported in the cloud; they are not a current placement instruction.
 
-- `data/raw/` kökündeki ZIP (ör. `firms_country_archives_2000_2025.zip`) ingest'in bölge-klasörü kontrolünde açık hataya yol açar.
-- `data/raw/belgium/` gibi bir alt klasöre açılmış ülke-yıl CSV'leri ise taranır; uyarı basılması bunları otomatik dışlamaz. “Uygulama zaten reddeder” varsayımıyla burada tutulmamalıdır.
-- Geçerli DL_FIRE ZIP'leri yukarıdaki `argentina` ve `aachen_eifel` bölge klasörlerinde kalır. Bu davranış `pipeline/ingest.py` kaynak kodundan okundu; ingest bu makinede çalıştırılmadı.
+- A ZIP at the root of `data/raw/` (e.g. `firms_country_archives_2000_2025.zip`) causes an explicit error in ingest's region-folder check.
+- Country-year CSVs unpacked into a subfolder like `data/raw/belgium/`, however, are scanned; printing a warning does not automatically exclude them. They must not be kept here on the assumption that “the app already rejects them”.
+- The valid DL_FIRE ZIPs stay in the `argentina` and `aachen_eifel` region folders above. This behavior was read from the `pipeline/ingest.py` source code; ingest was not run on this machine.
 
-## Geçerli girdi
+## Valid input
 
-- Kaynak: FIRMS DL_FIRE; `fire_archive_*` ve `fire_nrt_*` CSV çıktıları.
-- Dört veri akışı: MODIS, VIIRS S-NPP, NOAA-20, NOAA-21.
-- `data/raw/argentina/`: Arjantin ülke seçimi.
+- Source: FIRMS DL_FIRE; `fire_archive_*` and `fire_nrt_*` CSV outputs.
+- Four data streams: MODIS, VIIRS S-NPP, NOAA-20, NOAA-21.
+- `data/raw/argentina/`: Argentina country selection.
 - `data/raw/aachen_eifel/`: bbox `5.96, 50.44, 6.44, 50.83`.
-- Dönem: Kasım 2000–günümüz; her uydu için mevcut dönem.
-- NOAA-21 başlangıcı: 2023-03-01; S-NPP bitişi: 2026-11-02.
-- DL_FIRE VIIRS başlıkları da `brightness/bright_t31` olabilir;
-  enstrüman sütun adından değil uydu kodundan belirlenir.
+- Period: November 2000–present; the available period for each satellite.
+- NOAA-21 start: 2023-03-01; S-NPP end: 2026-11-02.
+- DL_FIRE VIIRS headers can also be `brightness/bright_t31`;
+  the instrument is determined from the satellite code, not from the column name.
 
-Takımın Drive arşivi bu biçimdedir ve P1/P4 teslimi yukarıdaki bildirime göre tamamlanmıştır. P6'nın bu Windows çalışma alanında tam parquet aktarımı ve runtime tekrarı henüz yapılmadı. Süleyman'ın kanonik parquet üzerinden teyit ettiği sayılar kaynak atfıyla kullanılır; burada yerel parquet kontrolü yapıldığı iddia edilmez.
+The team's Drive archive is in this format and, according to the notice above, the P1/P4 submission is complete. The full parquet transfer and the runtime re-run in this Windows workspace of P6 have not been done yet. The counts Süleyman confirmed on the canonical parquet are used with source attribution; it is not claimed here that a local parquet check was done.
 
-## Tarihsel ülke-yıl indirmesi (v1.1)
+## Historical country-year download (v1.1)
 
-| Ülke | Ürün | CSV | Ham satır | İlk tespit | Son tespit |
+| Country | Product | CSV | Raw rows | First detection | Last detection |
 |---|---|---:|---:|---|---|
 | argentina | modis | 26 | 1,712,416 | 2000-11-01 | 2025-12-31 |
 | argentina | viirs-jpss1 | 8 | 1,728,797 | 2018-04-01 | 2025-12-31 |
@@ -57,17 +57,17 @@ Takımın Drive arşivi bu biçimdedir ve P1/P4 teslimi yukarıdaki bildirime g�
 | germany | viirs-jpss1 | 8 | 147,471 | 2018-04-01 | 2025-12-31 |
 | germany | viirs-snpp | 14 | 249,977 | 2012-01-20 | 2025-12-31 |
 
-144 CSV, 6.893.939 ham satır, 554.614.725 bayt. Her ülke için 48 CSV.
+144 CSVs, 6,893,939 raw rows, 554,614,725 bytes. 48 CSVs per country.
 MODIS 2000–2025, S-NPP 2012–2025, NOAA-20 2018–2025.
-2026 ve NOAA-21 içermez. Satır sayıları benzersiz tespit veya yangın olayı sayısı değildir.
+Does not contain 2026 or NOAA-21. Row counts are not counts of unique detections or fire events.
 
-Kaynak: https://firms.modaps.eosdis.nasa.gov/data/country/yearly_summary_files.txt
+Source: https://firms.modaps.eosdis.nasa.gov/data/country/yearly_summary_files.txt
 
-Boyutlar NASA listesiyle eşleşti; SHA-256 değerleri yerel olarak üretildi.
-CSV kontrolü yeni Python 3.12 ortamında yeniden çalıştırıldı; alan sayısı bozuk
-satır veya kontrol edilen temel alanlarda boş değer yok.
+The sizes matched the NASA listing; the SHA-256 values were generated locally.
+The CSV check was re-run in the new Python 3.12 environment; no rows with a broken field count
+and no empty values in the checked core fields.
 
-## İlk indirilen CSV — yalnız tarihsel başlık örneği
+## First downloaded CSV — historical header example only
 
 `head -3 data/raw/belgium/modis_2011_Belgium.csv`:
 
@@ -77,28 +77,28 @@ latitude,longitude,brightness,scan,track,acq_date,acq_time,satellite,instrument,
 51.1698,3.8165,313.9,1,1,2011-01-04,1051,Terra,MODIS,52,6.2,272.7,17.9,D,2
 ```
 
-Ülke-yıl VIIRS CSV başlığı `bright_ti4/bright_ti5` kullanır. Bu fark, DL_FIRE
-başlıkları için varsayım yapılamayacağını gösterir. MODIS ham `version`
-değerleri `6.2`, `6.03`, `61.03`; VIIRS `2`. Veriler değiştirilmedi.
+The country-year VIIRS CSV header uses `bright_ti4/bright_ti5`. This difference shows that no assumption
+can be made about the DL_FIRE headers. The raw MODIS `version`
+values are `6.2`, `6.03`, `61.03`; VIIRS `2`. The data was not changed.
 
-Eski Belçika CSV içinde, enlem 50.45–50.60 ve boylam 5.95–6.25 kutusunda,
-25–26 Nisan 2011 için 17 ham MODIS tespit satırı bulundu. Bu ön kontrol,
-güncel DL_FIRE pipeline kontrolü veya bilimsel doğrulama değildir.
+In the old Belgium CSV, in the latitude 50.45–50.60 and longitude 5.95–6.25 box,
+17 raw MODIS detection rows were found for 25–26 April 2011. This pre-check
+is not a current DL_FIRE pipeline check or scientific validation.
 
-## Tarihsel aktarım paketi
+## Historical transfer package
 
-Cloud'da bildirilen eski konum `data/raw/firms_country_archives_2000_2025.zip`: 145.340.525 bayt. Güncel saklama önerisi `data/archive/firms_country_archives_2000_2025.zip`; ZIP ve içindeki ülke-yıl CSV'leri `data/raw/` altında tutulmaz.
-ZIP bütünlük kontrolü geçti. SHA-256: `data_transfer_package.json`.
-Paket v1.1 arşividir; güncel v1.3 girdi klasörlerine açılmamalıdır. ZIP içindeki eski
-yerleştirme yönergelerinin yerine bu not geçerlidir.
-Bu tarihsel paket için cloud raporunda Drive/USB aktarımı yapılmadığı yazılıydı; bu ifade güncel DL_FIRE tesliminin eksik olduğu anlamına gelmez. Hiçbir raw CSV veya ZIP bu belge değişikliğiyle git'e eklenmedi.
+Old location reported in the cloud `data/raw/firms_country_archives_2000_2025.zip`: 145,340,525 bytes. Current storage recommendation `data/archive/firms_country_archives_2000_2025.zip`; the ZIP and the country-year CSVs inside it are not kept under `data/raw/`.
+The ZIP integrity check passed. SHA-256: `data_transfer_package.json`.
+The package is the v1.1 archive; it must not be unpacked into the current v1.3 input folders. This note replaces the old
+placement instructions inside the ZIP.
+For this historical package the cloud report stated that no Drive/USB transfer was made; this statement does not mean that the current DL_FIRE submission is incomplete. No raw CSV or ZIP was added to git with this document change.
 
-## Cloud oturumunun kapanış durumu / aktarılacak bilgi
+## Closing status of the cloud session / information to hand over
 
-- Ortam kuruldu: Python 3.12.14, sabit paket sürümleri.
-- Smoke test: 7 geçti, 6 atlandı, 0 hata; query kontrolleri sentetik veride.
-- Ortam raporu: `environment_check.md`.
-- Cloud kapanışında harmonize sayı bekleniyordu. Sonraki P1 tesliminde Nisan 17,0; Ağustos 169,2 MODIS-eşdeğeri olarak bildirildi; ham Ağustos 105 MODIS + 1.794 VIIRS.
-- Cloud kapanışında bekleyen DL_FIRE/parquet teslimi P1/P4 tarafında sonradan tamamlandı; P6 yerel aktarım ve runtime kontrolü ayrı, halen bekliyor.
-- `2026 Judging Criteria.docx` çalışma alanında bulunamadı; taşıma yapılmadı.
-- Kod ve sözleşme değiştirilmedi; P6 değişiklikleri `docs/pitch/` altındadır.
+- Environment set up: Python 3.12.14, pinned package versions.
+- Smoke test: 7 passed, 6 skipped, 0 errors; query checks on synthetic data.
+- Environment report: `environment_check.md`.
+- At cloud closing, the harmonized count was pending. In the subsequent P1 submission it was reported as April 17.0; August 169.2 MODIS-equivalent; raw August 105 MODIS + 1,794 VIIRS.
+- The DL_FIRE/parquet submission pending at cloud closing was later completed on the P1/P4 side; P6's local transfer and runtime check are separate and still pending.
+- `2026 Judging Criteria.docx` was not found in the workspace; not moved.
+- Code and contract were not changed; the P6 changes are under `docs/pitch/`.

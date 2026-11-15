@@ -1,55 +1,55 @@
-# P2 — Harmonizasyon: Bahtiyar
+# P2 — Harmonization: Bahtiyar
 
-Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md`** (güncel sürüm)'de. Bu dosya sadece senin rolün.
+Shared rules and the schedule are in the root `CLAUDE.md`, the schema is in **`docs/CONTRACT.md`** (current version). This file covers only your role.
 
-## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
+## Files you own (Claude writes ONLY to these)
 - `pipeline/harmonize.py`
 
-## Girdi / çıktı (CONTRACT §7.2)
-- Girdi: `data/hotspots.parquet` + `data/satellite_coverage.csv` (P1). 12:30'a kadar `data/sample/` + `data/mock/` ile geliştir.
-- Çıktılar:
-  - `data/hotspots_harm.parquet` — aynı şema, `weight_harm` dolu → yazmadan önce `validate_hotspots(df, "harm")`
-  - `data/monthly_grid.parquet` — CONTRACT §7.2 tablosu
-  - `data/k_factors.csv` — en az `k, n_modis, n_viirs, fallback` + seçtiğin tabaka sütunları
+## Input / output (CONTRACT §7.2)
+- Input: `data/hotspots.parquet` + `data/satellite_coverage.csv` (P1). Until 12:30, develop with `data/sample/` + `data/mock/`.
+- Outputs:
+  - `data/hotspots_harm.parquet` — same schema, `weight_harm` filled → `validate_hotspots(df, "harm")` before writing
+  - `data/monthly_grid.parquet` — CONTRACT §7.2 table
+  - `data/k_factors.csv` — at least `k, n_modis, n_viirs, fallback` + the columns of the strata you choose
 
-## Görev
-**Yöntemin sahibi sensin** (CONTRACT §6). Sözleşme sadece şunu ister: `Σ weight_harm` =
-MODIS-eşdeğeri tespit tahmini, değerler ≥ 0, NaN yok. Seçtiğin yöntemi `harmonize.py` başındaki
-docstring'e 5–10 satırla yaz (P3 ve P6 oradan okuyacak). Aşağıdaki Yöntem A bir **başlangıç önerisi**.
-1. **Grid + ay** — 0.25° hücre (`cell_lat/cell_lon` = hücre merkezi), hücre × ay × uydu sayıları.
-2. **Yardımcı sütunlar** (parquet'e YAZMA, sadece hesapta):
-   - `lat_band` = |lat| 10°'lik dilim: `"20-30"`, `"30-40"`, `"40-50"`, `"50-60"` …
-   - `season` = yerel mevsim: güney yarımkürede ay +6 kaydır, sonra DJF=winter, MAM=spring,
+## Task
+**You are the owner of the method** (CONTRACT §6). The contract only requires this: `Σ weight_harm` =
+MODIS-equivalent detection estimate, values ≥ 0, no NaN. Describe the method you choose in 5–10 lines in the docstring
+at the top of `harmonize.py` (P3 and P6 will read it from there). Method A below is a **starting suggestion**.
+1. **Grid + month** — 0.25° cell (`cell_lat/cell_lon` = cell center), counts per cell × month × satellite.
+2. **Helper columns** (do NOT WRITE them to the parquet, only in the computation):
+   - `lat_band` = |lat| 10° slice: `"20-30"`, `"30-40"`, `"40-50"`, `"50-60"` …
+   - `season` = local season: in the southern hemisphere shift the month by +6, then DJF=winter, MAM=spring,
      JJA=summer, SON=autumn.
-3. **k katsayıları** — Eğitim: **Arjantin, 2012–2021**. Her `(lat_band, season, satellite)` için
-   `k = Σ MODIS / Σ VIIRS_satellite` — sadece hem MODIS hem o VIIRS uydusunun aktif olduğu aylar.
-   - Az örnek (n_modis < 30): aynı `season`+`satellite` için tüm bantları birleştir → `fallback=True`.
-   - Eğitimde olmayan bant (ör. Almanya 50-60 boşsa): en yakın bant / mevsim ortalaması, `fallback=True`.
+3. **k coefficients** — Training: **Argentina, 2012–2021**. For each `(lat_band, season, satellite)`
+   `k = Σ MODIS / Σ VIIRS_satellite` — only the months in which both MODIS and that VIIRS satellite were active.
+   - Few samples (n_modis < 30): merge all bands for the same `season`+`satellite` → `fallback=True`.
+   - Band not in the training data (e.g. if Germany 50-60 is empty): nearest band / season average, `fallback=True`.
 4. **weight_harm** —
-   - MODIS, tarih < S-NPP ilk tarih → 1.0; sonrası → 0.0
-   - VIIRS → `k / n_active_viirs(acq_date)`, aktif uydu = `satellite_coverage.csv`'deki **ilk VE son**
-     tarih arasında (S-NPP 2026-11-02'de bitti)
-   - Terra'nın tek MODIS olduğu dönem (2000-11 → 2002-07): harmonize seri yarı seviyede kalır →
-     ya Terra ağırlığı 2 ya da takvim 2003'ten başlar. Karar 10:30 toplantısında.
-5. **Uygula: her yer** (Arjantin dışı da).
-6. **Özet yazdır** — Arjantin için yıllık ham toplam vs harmonize toplam; 2012/2018/2023 sıçraması
-   harmonizede kayboluyor mu?
+   - MODIS, date < S-NPP first date → 1.0; after that → 0.0
+   - VIIRS → `k / n_active_viirs(acq_date)`, active satellite = between the **first AND last**
+     date in `satellite_coverage.csv` (S-NPP ended on 2026-11-02)
+   - Period in which Terra was the only MODIS (2000-11 → 2002-07): the harmonized series stays at half level →
+     either Terra weight 2 or the calendar starts from 2003. Decision at the 10:30 meeting.
+5. **Apply: everywhere** (outside Argentina as well).
+6. **Print a summary** — for Argentina, annual raw total vs harmonized total; does the 2012/2018/2023 jump
+   disappear in the harmonized series?
 
-## Teslimler
-| Saat | Ne | Kime |
+## Submissions
+| Time | What | To whom |
 |---|---|---|
-| 14:30 | `k_factors.csv` ilk sürüm | Oğuzhan (P3), Barış |
+| 14:30 | `k_factors.csv` first version | Oğuzhan (P3), Barış |
 | 16:30 | `hotspots_harm.parquet` + `monthly_grid.parquet` | Barış (P4), Oğuzhan (P3) |
 
-## Bitti kontrolü
-- [ ] `weight_harm` hiç NaN değil, hepsi ≥ 0
-- [ ] Arjantin 2012–2021 `Σ weight_harm` ≈ `Σ MODIS` (fark < %10)
-- [ ] k tablosunda her satırın `n_modis`, `n_viirs` değeri var; fallback'ler işaretli
-- [ ] Ham yıllık seride 2012/2018/2023 basamakları var, harmonizede yok (grafiği P6'ya at)
+## Done check
+- [ ] `weight_harm` is never NaN, all ≥ 0
+- [ ] Argentina 2012–2021 `Σ weight_harm` ≈ `Σ MODIS` (difference < 10%)
+- [ ] Every row in the k table has an `n_modis`, `n_viirs` value; fallbacks are flagged
+- [ ] The raw annual series has the 2012/2018/2023 steps, the harmonized one does not (send the plot to P6)
 
-## Claude'a not
-- `pipeline/validate.py` Oğuzhan'ın; test/metrik kodu oraya yazılmaz, buraya da yazılmaz.
-- k'yı test yıllarıyla (2022–2024) **eğitme** — veri sızıntısı.
-- `weight_harm`'ın **anlamını** (Σ = MODIS-eşdeğeri) değiştirmek gerekirse kod yazma; "Barış'a sor" de.
-  Yöntemi değiştirmek serbest, ama docstring'i güncelle ve Oğuzhan'a haber ver.
-- Katsayıyı "doğrulanmış" diye yazma; doğrulama P3'ün metrikleriyle olur.
+## Note for Claude
+- `pipeline/validate.py` belongs to Oğuzhan; test/metric code is not written there, and not here either.
+- Do **not train** k on the test years (2022–2024) — data leakage.
+- If the **meaning** of `weight_harm` (Σ = MODIS-equivalent) needs to change, do not write code; say "ask Barış".
+  Changing the method is allowed, but update the docstring and notify Oğuzhan.
+- Do not write the coefficient up as "validated"; validation happens with P3's metrics.

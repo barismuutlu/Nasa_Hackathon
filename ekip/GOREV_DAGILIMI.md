@@ -1,93 +1,93 @@
-🔥 SPACE APPS 2026 – GÖREV DAĞILIMI 🛰️
-Lider: P4 Barış (entegrasyon + hızlı kararlar)
+🔥 SPACE APPS 2026 – TASK DISTRIBUTION 🛰️
+Lead: P4 Barış (integration + quick decisions)
 
 ━━━━━━━━━━━━━━━━━━
-🟦 VERİ & BİLİM EKİBİ
+🟦 DATA & SCIENCE TEAM
 ━━━━━━━━━━━━━━━━━━
 
-P1 – Veri Mühendisi: SÜLEYMAN
+P1 – Data Engineer: SÜLEYMAN
 📁 pipeline/ingest.py
-* FIRMS CSV'leri oku (MODIS + VIIRS S-NPP/N20/N21)
-* archive + nrt birleştir, tekrarları sil (çakışmada archive kalır)
-* Ortak şemaya çevir → data/hotspots.parquet
-⏰ 11:30 örnek dosya (1 bölge, 1 yıl) → herkese
-⏰ 12:30 tam veri + uydu ilk/son tarih tablosu → Bahtiyar
+* Read the FIRMS CSVs (MODIS + VIIRS S-NPP/N20/N21)
+* Merge archive + nrt, delete duplicates (on overlap, archive stays)
+* Convert to the shared schema → data/hotspots.parquet
+⏰ 11:30 sample file (1 region, 1 year) → everyone
+⏰ 12:30 full data + satellite first/last date table → Bahtiyar
 
-P2 – Harmonizasyon: BAHTİYAR
+P2 – Harmonization: BAHTİYAR
 📁 pipeline/harmonize.py
-* Grid (0.25°) + ay bazında MODIS/VIIRS sayıları
-* Yöntem A: k = MODIS / VIIRS (enlem bandı × yerel mevsim × uydu)
-* weight_harm = k / aktif VIIRS uydu sayısı
-* Eğitim: Arjantin 2012–2021, uygulama: her yer
+* MODIS/VIIRS counts per grid (0.25°) + month
+* Method A: k = MODIS / VIIRS (latitude band × local season × satellite)
+* weight_harm = k / number of active VIIRS satellites
+* Training: Argentina 2012–2021, application: everywhere
 ⏰ 14:30 k_factors.csv → Oğuzhan
-⏰ 16:30 harmonize veri hazır
+⏰ 16:30 harmonized data ready
 
-P3 – ML & Doğrulama: OĞUZHAN
+P3 – ML & Validation: OĞUZHAN
 📁 pipeline/validate.py
-* Eğitim 2012–2021, test 2022–2024
-* Metrikler: R², bias + tahmin-gerçek grafiği
-* Kontrol: Venn Ağustos 2026 + Nisan 2011 görünüyor mu?
-* Zaman kalırsa: Yöntem B (lojistik regresyon)
-⏰ 19:00 doğrulama sonuçları → İbrahim
+* Training 2012–2021, test 2022–2024
+* Metrics: R², bias + predicted-vs-actual plot
+* Check: are Venn August 2026 + April 2011 visible?
+* If time allows: Method B (logistic regression)
+⏰ 19:00 validation results → İbrahim
 
 ━━━━━━━━━━━━━━━━━━
-🟩 UYGULAMA EKİBİ
+🟩 APP TEAM
 ━━━━━━━━━━━━━━━━━━
 
-P4 – Veri Katmanı + LİDER: BARIŞ
+P4 – Data Layer + LEAD: BARIŞ
 📁 app/query.py + CLAUDE.md
-* 08:55 CLAUDE.md, .gitignore, requirements.txt, klasörler push
+* 08:55 push CLAUDE.md, .gitignore, requirements.txt, folders
 * 11:00 mock parquet → Yusuf
 * get_hotspots(), monthly_matrix(), anomaly(), to_csv_bytes()
-⏰ 16:30 gerçek veriyle çalışıyor
+⏰ 16:30 working with real data
 
-P5 – Arayüz: YUSUF
+P5 – Interface: YUSUF
 📁 app/app.py
-* Streamlit: harita + bölge çizimi (streamlit-folium)
-* Takvim ısı haritası: ay × yıl, viridis (plotly)
-* Anomali kartı, ham/harmonize düğmesi, CSV indir
-* Hazır bölgeler: Aachen/Eifel + La Rioja + Hohes Venn
-* Streamlit Cloud'a yayınla (Pazar sabah)
-⏰ 16:30 ham takvim çalışıyor
-⏰ 19:00 MVP hazır
+* Streamlit: map + region drawing (streamlit-folium)
+* Calendar heatmap: month × year, viridis (plotly)
+* Anomaly card, raw/harmonized toggle, CSV download
+* Preset regions: Aachen/Eifel + La Rioja + Hohes Venn
+* Publish to Streamlit Cloud (Sunday morning)
+⏰ 16:30 raw calendar working
+⏰ 19:00 MVP ready
 
 ━━━━━━━━━━━━━━━━━━
-🟨 HİKÂYE EKİBİ
+🟨 STORY TEAM
 ━━━━━━━━━━━━━━━━━━
 
-P6 – Sunum & Test: İBRAHİM
+P6 – Presentation & Testing: İBRAHİM
 📁 docs/pitch/
-* Slaytlar (~4 dk pitch), 6 FIRMS görüntüsü
-* Worldview: aynı gün MODIS vs VIIRS
-* Proje sayfası metni
-* Demo senaryosu + uygulamayı kullanıcı gibi test et
-* Saat takibi ⏱️
-⏰ Pazar 14:00 sunum hazır
+* Slides (~4 min pitch), 6 FIRMS images
+* Worldview: MODIS vs VIIRS on the same day
+* Project page text
+* Demo scenario + test the app like a user
+* Timekeeping ⏱️
+⏰ Sunday 14:00 presentation ready
 
 ━━━━━━━━━━━━━━━━━━
-⏰ KONTROL NOKTALARI (5 dk)
+⏰ CHECKPOINTS (5 min)
 ━━━━━━━━━━━━━━━━━━
-10:30 Roller + şema + repo hazır
-13:00 Gerçek veri herkeste, mock uygulama ayakta
-16:30 ✅ Ham takvim uçtan uca
-19:00 ✅ Harmonize MVP
-Pazar 09:15 Jüri kriterleri
-Pazar 12:00 ❄️ FEATURE FREEZE
-Pazar 14:30 📤 TESLİM (son saat 15:00)
+10:30 Roles + schema + repo ready
+13:00 Real data with everyone, mock app up and running
+16:30 ✅ Raw calendar end-to-end
+19:00 ✅ Harmonized MVP
+Sunday 09:15 Judging criteria
+Sunday 12:00 ❄️ FEATURE FREEZE
+Sunday 14:30 📤 SUBMISSION (deadline 15:00)
 
 ━━━━━━━━━━━━━━━━━━
-🤖 CLAUDE KURULUMU (herkes, 1 kez)
+🤖 CLAUDE SETUP (everyone, 1 time)
 ━━━━━━━━━━━━━━━━━━
 git clone … && cd …
-echo "@ekip/P1_Suleyman.CLAUDE.md" > CLAUDE.local.md   ← kendi dosyanı yaz
+echo "@ekip/P1_Suleyman.CLAUDE.md" > CLAUDE.local.md   ← write your own file
 (P2_Bahtiyar / P3_Oguzhan / P4_Baris / P5_Yusuf / P6_Ibrahim)
 
 ━━━━━━━━━━━━━━━━━━
-📌 KURALLAR
+📌 RULES
 ━━━━━━━━━━━━━━━━━━
-* Herkes SADECE kendi dosyasında çalışır
-* Şema değişikliği → önce Barış'a sor
-* Commit'ten önce: git pull --rebase
-* Her 30–60 dk küçük commit, sadece kendi dosyanı git add
-* Ajan kodunu commit'ten önce kontrol et
-* Takıldın mı? 15 dk'dan fazla uğraşma, söyle!
+* Everyone works ONLY in their own file
+* Schema change → ask Barış first
+* Before committing: git pull --rebase
+* A small commit every 30–60 min, git add only your own file
+* Check the agent's code before committing
+* Stuck? Don't spend more than 15 min on it, say so!

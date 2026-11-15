@@ -1,49 +1,49 @@
-# P5 — Arayüz: Yusuf
+# P5 — Interface: Yusuf
 
-Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema/API **`docs/CONTRACT.md`** (güncel sürüm)'de. Bu dosya sadece senin rolün.
+Shared rules and the schedule are in the root `CLAUDE.md`, the schema/API is in **`docs/CONTRACT.md`** (current version). This file covers only your role.
 
-## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
+## Files you own (Claude writes ONLY to these)
 - `app/app.py`
 - `.streamlit/config.toml`
 
-## Veri erişimi
-Parquet'i **doğrudan okuma**. Sadece `app/query.py` API'si (CONTRACT §7.4):
+## Data access
+Do **not read the parquet directly**. Only the `app/query.py` API (CONTRACT §7.4):
 ```python
 from query import PRESETS, MONTH_LABELS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes
 ```
-`data_info()["is_mock"]` True ise sayfanın üstünde **"SENTETİK TEST VERİSİ"** uyarısı göster.
-`data_info()["has_harm"]` False ise harmonize düğmesi "henüz hazır değil" desin.
-Ağır çağrıları `@st.cache_data` ile sar. API'de eksik bir şey varsa → Barış'a söyle, query.py'ye yazma.
-Sentetik veri `data/mock/` içinde hazır — `git pull` yeter.
+If `data_info()["is_mock"]` is True, show a **"SYNTHETIC TEST DATA"** warning at the top of the page.
+If `data_info()["has_harm"]` is False, the harmonized toggle should say "not ready yet".
+Wrap heavy calls with `@st.cache_data`. If something is missing in the API → tell Barış, do not write to query.py.
+Synthetic data is ready in `data/mock/` — `git pull` is enough.
 
-## Görev (Streamlit)
-1. **Kenar çubuğu** — hazır bölge seçimi (`PRESETS`: Aachen/Eifel, La Rioja, Hohes Venn),
-   tarih aralığı, **Ham / Harmonize** düğmesi (`mode="raw"` / `"harm"`), CSV indir butonu.
-2. **Harita** — `streamlit-folium` + `folium.plugins.Draw` (dikdörtgen/çokgen). Çizilen GeoJSON →
-   `get_hotspots(geom)`. Seçili bölgenin noktaları (çok fazlaysa örnekle, ≤5000).
-3. **Takvim ısı haritası** — `plotly` `go.Heatmap`: x = ay (Oca…Ara), y = yıl, renk `viridis`,
-   hover: yıl, ay, değer. NaN hücreler gri. Ham ↔ harmonize geçişte renk ölçeği ayrı.
-4. **Anomali kartı** — seçili (yıl, ay) için `anomaly()`: `st.metric` değer + z + label.
-   Isı haritasında tıklanan hücre seçimi (`plotly_events` yoksa selectbox yeterli).
-5. **Açıklama satırı** — "Ham: tüm uyduların tespit sayısı. Harmonize: MODIS-eşdeğeri tahmin."
-   Metinlerde "yangın" değil "tespit" (CONTRACT §8); anomali kartı = tespit sayısı anomalisi.
-6. **Yayın (Pazar sabah)** — Streamlit Cloud, ana dosya `app/app.py`, veri `data/deploy/`.
+## Task (Streamlit)
+1. **Sidebar** — preset region selection (`PRESETS`: Aachen/Eifel, La Rioja, Hohes Venn),
+   date range, **Raw / Harmonized** toggle (`mode="raw"` / `"harm"`), CSV download button.
+2. **Map** — `streamlit-folium` + `folium.plugins.Draw` (rectangle/polygon). Drawn GeoJSON →
+   `get_hotspots(geom)`. Points of the selected region (if there are too many, sample them, ≤5000).
+3. **Calendar heatmap** — `plotly` `go.Heatmap`: x = month (Oca…Ara, i.e. Jan…Dec), y = year, color `viridis`,
+   hover: year, month, value. NaN cells gray. Separate color scale when switching raw ↔ harmonized.
+4. **Anomaly card** — `anomaly()` for the selected (year, month): `st.metric` value + z + label.
+   Cell selection by clicking in the heatmap (if `plotly_events` is not available, a selectbox is enough).
+5. **Explanation line** — "Raw: detection count of all satellites. Harmonized: MODIS-equivalent estimate."
+   In the texts "detection", not "fire" (CONTRACT §8); anomaly card = detection count anomaly.
+6. **Publishing (Sunday morning)** — Streamlit Cloud, main file `app/app.py`, data `data/deploy/`.
 
-## Teslimler
-| Saat | Ne | Kime |
+## Submissions
+| Time | What | To whom |
 |---|---|---|
-| 13:00 | Mock veriyle uygulama ayakta (harita + takvim) | herkes |
-| 16:30 | Ham takvim gerçek veriyle uçtan uca | Barış |
-| 19:00 | MVP: harita + çizim + takvim + anomali + düğme + CSV | İbrahim (test) |
-| Pazar 10:00 | Streamlit Cloud linki | İbrahim (P6), Barış |
+| 13:00 | App up and running with mock data (map + calendar) | everyone |
+| 16:30 | Raw calendar end-to-end with real data | Barış |
+| 19:00 | MVP: map + drawing + calendar + anomaly + toggle + CSV | İbrahim (test) |
+| Sunday 10:00 | Streamlit Cloud link | İbrahim (P6), Barış |
 
-## Bitti kontrolü
-- [ ] Hohes Venn seçince Nisan 2011 ve Ağustos 2026 takvimde belirgin
-- [ ] La Rioja'da Ham → Harmonize geçişte 2012/2018/2023 sıçraması kayboluyor
-- [ ] Boş bölge çizilince çökmüyor ("Bu bölgede tespit yok" mesajı)
-- [ ] Sayfa ilk açılış < 5 sn (cache)
+## Done check
+- [ ] When Hohes Venn is selected, April 2011 and August 2026 stand out in the calendar
+- [ ] In La Rioja, the 2012/2018/2023 jump disappears when switching Raw → Harmonized
+- [ ] Does not crash when an empty region is drawn ("No detections in this area" message)
+- [ ] First page load < 5 s (cache)
 
-## Claude'a not
-- Görsel tutarlılık: viridis, tek font, başlıklar Türkçe + İngilizce kısa (jüri yabancı olabilir).
-- Yeni paket gerekiyorsa ekleme; "Barış'a söyle, requirements'a eklesin" de.
-- Feature freeze (Pazar 12:00) sonrası sadece bug fix.
+## Note for Claude
+- Visual consistency: viridis, a single font, headings short in Turkish + English (the judges may be foreign).
+- If a new package is needed, do not add it; say "tell Barış to add it to requirements".
+- After the feature freeze (Sunday 12:00), bug fixes only.

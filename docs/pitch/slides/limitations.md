@@ -1,17 +1,17 @@
-# Slayt: Sınırlamalar ve sonraki adım
+# Slide: Limitations and next step
 
-P6 İbrahim · 14 Kasım 2026. Gerçek veri kaynakları: P3 `metrics.json` (`b4cbbd4`), `summary.md` (`c6f15ad`) ve P1/P4 teslimleri. Bu dosya slayt metnidir; tamamlanmış sunum dosyası değildir.
+P6 İbrahim · 14 November 2026. Real data sources: P3 `metrics.json` (`b4cbbd4`), `summary.md` (`c6f15ad`) and the P1/P4 submissions. This file is slide text; it is not a finished presentation file.
 
-## Ekranda gösterilecek üç madde
+## Three points to show on screen
 
-1. **2022 fazla tahmini:** Arjantin, 2022 bağımsız test, 1° hücre-ay: toplam sapma **+%18,36**; R²=0,7052, n=2.834. Aynı ölçekte 2023–2024 sapması −%2,51'dir; bir yılın hatası genel ortalama içinde saklanmamalı.
-2. **Bölge ve büyük olay aktarımı sınırlı:** Hohes Venn Ağustos 2026 tahmini **169,2 MODIS-eşdeğeri**, MODIS referansı 105; yaklaşık **+%61**. Aachen/Eifel 2022–2024'te yalnız 7 MODIS tespiti var; bu bölgenin test R²'sini başarı iddiası için kullanmıyoruz. La Rioja 2017'de de yaklaşık +%32 fazla tahmin var.
-3. **Sonraki adım — sınanacak hipotez:** Katsayı yangın büyüklüğüne bağlı olabilir; bu henüz doğrulanmadı. Tespit kümelerinin alanı / toplam FRP ile koşullama ve Avrupa'dan ikinci eğitim bölgesi değerlendirilmeli.
+1. **2022 overestimate:** Argentina, 2022 independent test, 1° cell-month: total deviation **+18.36%**; R²=0.7052, n=2,834. At the same scale the 2023–2024 deviation is −2.51%; one year's error must not be hidden inside the overall average.
+2. **Transfer to regions and large events is limited:** Hohes Venn August 2026 estimate **169.2 MODIS-equivalent**, MODIS reference 105; about **+61%**. Aachen/Eifel has only 7 MODIS detections in 2022–2024; we do not use this region's test R² for a success claim. La Rioja 2017 also has an overestimate of about +32%.
+3. **Next step — hypothesis to be tested:** The coefficient may depend on fire size; this has not been validated yet. Conditioning on the area / total FRP of detection clusters and a second training region from Europe should be evaluated.
 
-## Konuşmacı notları
+## Speaker notes
 
-- 2022 sapmasını tek başına S-NPP/Aqua kesintisine veya yörünge kaymasına bağlama; P3 özeti bunu açıklayıcı sonuç olarak desteklemiyor.
-- `transfer_2012-2026` ve büyük olay hariç aktarım R² sonuçları mevcut `metrics.json` içinde değil; P4 onayı ve sözleşmeye uygun kayıt bekleniyor. Bu slaytta bunların sayısal R² değerlerini kullanma.
-- P3 mesajındaki yıllık belirsizlik bandı için JSON'da ayrı hesap/yöntem kaydı yok; sayısal bant bu slayta eklenmedi.
-- Kaynak **NASA MCD64A1 C6.1**. Örtüşme yalnız **destekleyici kanıt**: 3×3 piksel komşuluğu ≈1,4 km genişlik, ±16 gün; Nisan 9/17 (%53), Ağustos MODIS 93/105 (%89), VIIRS 1.674/1.794 (%93). Ürün MODIS aktif yangın girdisini de kullanır; bağımsız doğrulama veya olay sınıflandırma doğruluğu değildir. R²/bias tablosuna eklenmez.
-- Her R²'nin yanında bölge, test dönemi, ölçek ve n bulunmalı. “Gerçek yangın sayısı” ve “uydu sıçramaları tamamen giderildi” ifadeleri kullanılmaz.
+- Do not attribute the 2022 deviation solely to the S-NPP/Aqua outage or orbital drift; the P3 summary does not support this as an explanatory result.
+- The `transfer_2012-2026` and large-event-excluded transfer R² results are not in the current `metrics.json`; P4 approval and a contract-compliant record are awaited. Do not use their numerical R² values on this slide.
+- There is no separate calculation/method record in the JSON for the annual uncertainty band in P3's message; the numerical band was not added to this slide.
+- Source **NASA MCD64A1 C6.1**. The overlap is only **supporting evidence**: 3×3 pixel neighborhood ≈1.4 km width, ±16 days; April 9/17 (53%), August MODIS 93/105 (89%), VIIRS 1,674/1,794 (93%). The product also uses MODIS active fire input; it is not independent validation or event classification accuracy. It is not added to the R²/bias table.
+- Every R² must be accompanied by region, test period, scale and n. The phrases “real fire count” and “satellite jumps fully removed” are not used.

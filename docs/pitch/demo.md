@@ -1,59 +1,59 @@
-# Demo akışı ve gerçek veri çekim planı
+# Demo flow and real-data capture plan
 
-P6 İbrahim · 14 Kasım 2026. Durum: akış hazır; P6 canlı ekran kontrolü, kayıt ve kronometreli prova henüz yapılmadı.
+P6 İbrahim · 14 November 2026. Status: flow ready; P6 live screen check, recording and timed rehearsal not done yet.
 
-Ekipten bildirilen public URL: https://nasahackathon-6dh2dds5wpz3r6q9mz5zx3.streamlit.app/
+Public URL reported by the team: https://nasahackathon-6dh2dds5wpz3r6q9mz5zx3.streamlit.app/
 
-## Başlamadan önce
+## Before starting
 
-- Gizli pencerede giriş istemeden açıldığını tekrar kontrol et. Bu oturumdaki web aracı URL'yi açamadı; bu sonuç sitenin kullanıcıya kapalı olduğu anlamına gelmez.
-- `Veri / Data` bölümündeki kaynak, kapsam ve uyduları kaydet. Son P4 bildirimi `f0f0759`: gerçek + harmonize deploy. Eski sentetik veya harmonizesiz teslim mesajları son durum yerine kullanılmaz.
-- Sentetik uyarı varsa o ekranı sunuma alma. Harmonize hazır-değil mesajı varsa akışı ham veriyle sürdürdüğünü belirt ve önceden doğrulanmış P3 takvimini kullan.
-- Hazır bölgeyi seç, önceki çizimi temizle. Deploy yalnız hazır kutuları kapsar; dışındaki tespitsiz görünümü bölgenin gerçekten hiç tespiti olmadığı şeklinde genelleme.
-- Nisan kartı ve yıllık karşılaştırmalar için tam veri dönemini koru. Yalnız 2011-04 filtresi, kartın 26 Nisanlık karşılaştırma tabanını bozar.
+- Check again that it opens in a private window without asking for login. The web tool in this session could not open the URL; this result does not mean that the site is closed to users.
+- Record the source, coverage and satellites in the `Veri / Data` section. Latest P4 notice `f0f0759`: real + harmonized deploy. Old synthetic or non-harmonized submission messages are not used in place of the latest state.
+- If there is a synthetic warning, do not take that screen into the presentation. If there is a harmonized-not-ready message, state that the flow continues with raw data and use the previously verified P3 calendar.
+- Select a prepared region, clear the previous drawing. The deploy covers only the prepared boxes; do not generalize a no-detection display outside them as the region truly having no detections at all.
+- Keep the whole data period for the April card and the annual comparisons. A 2011-04-only filter breaks the card's 26-April comparison baseline.
 
-## Yaklaşık 60 saniyelik canlı akış
+## Live flow of about 60 seconds
 
-| Süre | İşlem | Beklenen / konuşma |
+| Time | Action | Expected / talk |
 |---|---|---|
-| 00–10 sn | `Bölge: Hohes Venn` → tam tarih kapsamı → `Harmonize / Harmonized` → `Log` | Gerçek veri; aylık birim MODIS-eşdeğeri tahmin. Log renk dönüşümü karttaki sayıyı değiştirmez. |
-| 10–25 sn | 2011-04 hücresini seç; gerekirse Yıl/Ay seçicilerini kullan. | 17 MODIS-eşdeğeri; sıra 1/26; yaklaşık 28,7× (yuvarlatılmış gösterim 29× olabilir). Diğer 25 Nisanın ortalaması ≈0,59. |
-| 25–35 sn | Aynı kapsam ve ayda `Ham / Raw` seç; sonra Harmonize'ye dön. | Değer yine 17; ham ortalama 2,64 ve oran ≈6,4×. Bu, farklı tabanların karşılaştırmasıdır. Eski ≈25× sayısı kartın tanımı değildir. |
-| 35–45 sn | Hohes Venn 2026-08 hücresini göster; tam ayı koru. | Ham 1.899 = 105 MODIS + 1.794 VIIRS; harmonize ≈169 MODIS-eşdeğeri. 169, MODIS referansına eşit değildir. |
-| 45–60 sn | `La Rioja (AR)` seç; tam tarih aralığında `Yıllık toplam: Ham vs Harmonize` grafiğine geç. | 2011: 868/868; 2012: 3.437/808 (ham/harm). Canlı akış uzarsa bu geçişi önceden alınmış gerçek veri karesiyle göster. |
+| 00–10 s | `Region: Hohes Venn` → whole date coverage → `Harmonized` → `Log` | Real data; monthly unit is the MODIS-equivalent estimate. The Log color transform does not change the number on the card. |
+| 10–25 s | Select the 2011-04 cell; use the Year/Month selectors if needed. | 17 MODIS-equivalent; rank 1/26; about 28.7× (rounded display may be 29×). Mean of the other 25 Aprils ≈0.59. |
+| 25–35 s | Select `Raw` for the same coverage and month; then return to Harmonized. | Value again 17; raw mean 2.64 and ratio ≈6.4×. This is a comparison of different baselines. The old ≈25× number is not the card's definition. |
+| 35–45 s | Show the Hohes Venn 2026-08 cell; keep the full month. | Raw 1,899 = 105 MODIS + 1,794 VIIRS; harmonized ≈169 MODIS-equivalent. 169 is not equal to the MODIS reference. |
+| 45–60 s | Select `La Rioja (AR)`; switch to the `Annual totals: raw vs harmonized` chart over the whole date range. | 2011: 868/868; 2012: 3,437/808 (raw/harm). If the live flow runs long, show this transition with a previously captured real-data frame. |
 
-Ayrı ayrıntı kontrolü: 14–17 Ağustos seçilirse P1/P5 raporuna göre ham toplam yine 1.899'dur; hücre • ile kısmi ay ve hover'da gün aralığı göstermelidir. Bu dar filtreyi ana Nisan kartı provasıyla aynı anda kullanma; sonra tam dönemi geri yükle.
+Separate detail check: if 14–17 August is selected, according to the P1/P5 report the raw total is again 1,899; the cell must show a partial month with • and the day range on hover. Do not use this narrow filter at the same time as the main April card rehearsal; restore the whole period afterwards.
 
-P1'in hassas aylık harmonize değeri 169,2'dir; grafikte/konuşmada 169'a yuvarlatılır. MCD64A1 sorulursa Nisan 9/17 örtüşmesini 3×3 komşuluk ≈1,4 km genişlik ve ±16 gün ayarıyla **destekleyici kanıt** diye anlat; bağımsız olmadığını ekle. Ürünün yanma tarihleri ile FIRMS aktif tespit tarihlerini ayır. Slayt metni [slides/limitations.md](slides/limitations.md), tam kapsam [pitch_facts.md](pitch_facts.md) içinde.
+P1's precise monthly harmonized value is 169.2; in the chart/talk it is rounded to 169. If MCD64A1 is asked about, describe the April 9/17 overlap, with the 3×3 neighborhood ≈1.4 km width and ±16 days setting, as **supporting evidence**; add that it is not independent. Keep the product's burn dates separate from the FIRMS active detection dates. Slide text in [slides/limitations.md](slides/limitations.md), full scope in [pitch_facts.md](pitch_facts.md).
 
-## Çekilecek kareler
+## Frames to capture
 
-Bunlar planlanan dosya adlarıdır; henüz oluşturulmadı. Çekim tarihi 14 Kasım 2026 varsayılmıştır; gerçek çekim günü farklıysa dosya adını güncelle.
+These are planned file names; not created yet. The capture date is assumed to be 14 November 2026; if the actual capture day differs, update the file name.
 
-| Planlanan dosya | İçerik | Kontrol |
+| Planned file | Content | Check |
 |---|---|---|
-| `img/2026-11-14_harm_HohesVenn_calendar.png` | Hohes Venn, tam dönem, Harmonize, Log takvim | Sentetik uyarı yok; bölge ve seri görünür |
-| `img/2026-11-14_harm_HohesVenn_2011-04_card.png` | Nisan kartı | 17; 1/26; ≈29×; taban 2001–2026, 2011 hariç |
-| `img/2026-11-14_raw_HohesVenn_2011-04_card.png` | Aynı ayın ham kartı | 17; 1/26; ≈6,4×; aynı tarih/alan |
-| `img/2026-11-14_raw_harm_LaRioja_annual.png` | La Rioja yıllık karşılaştırma | Ham/harm birimleri, bölge ve 2011/2012 değerleri açık |
+| `img/2026-11-14_harm_HohesVenn_calendar.png` | Hohes Venn, whole period, Harmonized, Log calendar | No synthetic warning; region and series visible |
+| `img/2026-11-14_harm_HohesVenn_2011-04_card.png` | April card | 17; 1/26; ≈29×; baseline 2001–2026, excluding 2011 |
+| `img/2026-11-14_raw_HohesVenn_2011-04_card.png` | Raw card of the same month | 17; 1/26; ≈6.4×; same date/area |
+| `img/2026-11-14_raw_harm_LaRioja_annual.png` | La Rioja annual comparison | Raw/harm units, region and 2011/2012 values explicit |
 
-Görüntü alındığında kaynak yolu, veri sürümü/commit, tarih kapsamı, bölge, seri ve çekim tarihini `img/SOURCES.md` içine kaydet. Kaynak: “NASA FIRMS / Worldview”; uygulama görseliyse uygulama URL'sini de ekle. NASA logosu kullanma. Bu uygulama kareleri, aynı gün/aynı alan MODIS–VIIRS Worldview katman karşılaştırmasının yerine geçmez; o görsel ayrıca bekleniyor.
+When a visual is captured, record the source path, data version/commit, date coverage, region, series and capture date in `img/SOURCES.md`. Source: “NASA FIRMS / Worldview”; if it is an app visual, also add the app URL. Do not use the NASA logo. These app frames do not replace a same-day/same-area MODIS–VIIRS Worldview layer comparison; that visual is still expected separately.
 
-## İnternet veya canlı veri sorunu olursa
+## If there is an internet or live data problem
 
-- Öncelik, önceden alınmış gerçek uygulama ekranları ve çevrimdışı video. Bunlar henüz yok; varmış gibi sunma.
-- Mevcut gerçek veri [P3 Hohes Venn takvimi](../validation/venn_check.png), 17/1.899 ham ve 17/169 harmonize aylık değerleriyle destek sağlar. Bunun uygulama ekranı olmadığını söyle.
-- [P3 yıllık grafik](../validation/annual_raw_vs_harm.png) **Arjantin** içindir; La Rioja ekranının yerine kullanılırsa bölgenin değiştiğini açıkça belirt.
-- `pred_vs_true.png` içindeki Avrupa aktarım paneli henüz izinli JSON metriğiyle eşleşmediğinden tam görseli sonuç slaydı olarak kullanma. Arjantin bağımsız testini `pitch_facts.md` içindeki sayısal tabloyla anlat.
-- P3 grafikleri de açılamazsa kaynaklı sayı kartlarıyla konuşmayı sürdür; yeni sayılar üretme.
+- Priority is previously captured real app screens and the offline video. These do not exist yet; do not present them as if they did.
+- The existing real-data [P3 Hohes Venn calendar](../validation/venn_check.png) provides support with the 17/1,899 raw and 17/169 harmonized monthly values. Say that it is not an app screen.
+- The [P3 annual chart](../validation/annual_raw_vs_harm.png) is for **Argentina**; if it is used in place of the La Rioja screen, state clearly that the region has changed.
+- Because the European transfer panel in `pred_vs_true.png` does not yet match an allowed JSON metric, do not use the full figure as a results slide. Describe the Argentina independent test with the numerical table in `pitch_facts.md`.
+- If the P3 charts cannot be opened either, continue the talk with sourced number cards; do not produce new numbers.
 
-## Prova ve teslim kaydı
+## Rehearsal and submission log
 
-| Kontrol | Sonuç |
+| Check | Result |
 |---|---|
-| P6 public/gizli pencere canlı kontrolü | Bekliyor |
-| Gerçek uygulama kareleri ve kaynak notları | Bekliyor |
-| Video kaydı ve çevrimdışı oynatma | Bekliyor |
-| Tam konuşma ölçümü, hedef 3:55 / üst sınır 4:00 | Henüz ölçülmedi |
+| P6 public/private-window live check | Pending |
+| Real app frames and source notes | Pending |
+| Video recording and offline playback | Pending |
+| Full talk timing, target 3:55 / upper limit 4:00 | Not measured yet |
 
-Testlerin kanıt ve gözlem kaynakları [test_notes.md](test_notes.md), konuşma [script.md](script.md), sayısal kapsam [pitch_facts.md](pitch_facts.md) içindedir.
+The evidence and observation sources of the tests are in [test_notes.md](test_notes.md), the talk in [script.md](script.md), the numerical scope in [pitch_facts.md](pitch_facts.md).

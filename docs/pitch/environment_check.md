@@ -1,13 +1,13 @@
-# P6 cloud ortam kontrolü — tarihsel kayıt, 14 Kasım 2026
+# P6 cloud environment check — historical record, 14 November 2026
 
-Kaynak: `P6_ibrahim.patch`. Bu rapor önceki Linux cloud oturumuna aittir; repo referansı `8d5894c`, o sıradaki sözleşme v1.2'dir. Cloud'da `git pull --rebase` fast-forward ile tamamlandığı bildirilmiştir. Aşağıdaki sonuçlar Windows yerel ortamında yeniden çalıştırılmadı.
+Source: `P6_ibrahim.patch`. This report belongs to the earlier Linux cloud session; repo reference `8d5894c`, the contract at that time was v1.2. It was reported that on Cloud `git pull --rebase` completed with a fast-forward. The results below were not re-run in the Windows local environment.
 
-Mevcut yerel sözleşme v1.3'tür. İlk yerel incelemede `.venv/Scripts/python.exe` ve `uv` bulunmadı; Python 3.12 ve sabit paketlerin yerel doğrulaması bekleniyor. Yerel durum ve PowerShell komutları [test_notes.md](test_notes.md) içindedir. Cloud'daki sentetik smoke testi, yerel veya bilimsel doğrulama kanıtı değildir.
+The current local contract is v1.3. At the first local review `.venv/Scripts/python.exe` and `uv` were not found; local validation of Python 3.12 and the pinned packages is pending. The local status and the PowerShell commands are in [test_notes.md](test_notes.md). The synthetic smoke test on Cloud is not evidence of local or scientific validation.
 
-## Cloud'da bildirilen kurulum
+## Setup reported on Cloud
 
-`uv` zaten kurulu olduğundan yeniden kurulmadı. Eski `.venv` yoktu; yeni ortam
-repo kökünde oluşturuldu. Ek paket eklenmedi ve sabit sürümler değiştirilmedi.
+Since `uv` was already installed, it was not reinstalled. There was no old `.venv`; the new environment
+was created at the repo root. No extra packages were added and the pinned versions were not changed.
 
 ```bash
 uv venv --python 3.12 .venv
@@ -17,9 +17,9 @@ python --version
 python tests/smoke_test.py
 ```
 
-Kontrol edilen yorumlayıcı: `.venv/bin/python`; sanal ortam aktif.
-Python sürümü: **3.12.14**. `requirements.txt` içindeki 10 doğrudan bağımlılığın
-tamamı istenen sürümle eşleşti:
+Interpreter checked: `.venv/bin/python`; virtual environment active.
+Python version: **3.12.14**. All 10 direct dependencies in `requirements.txt`
+matched the requested version:
 
 ```text
 pandas==3.1.1
@@ -34,14 +34,16 @@ scikit-learn==1.9.1
 matplotlib==3.11.2
 ```
 
-## Smoke test sonucu
+## Smoke test result
 
 ```text
 ✅ ortam: Python 3.12 + requirements.txt sürümleri      Python 3.12, 10 paket
 13/13 geçti/atlandı, 0 hata
 ```
 
-7 kontrol geçti; 6 kontrol henüz dosyası olmadığı için atlandı:
+Verbatim program output (“ortam” = environment, “sürümleri” = versions, “paket” = packages, “geçti/atlandı” = passed/skipped, “hata” = errors).
+
+7 checks passed; 6 checks were skipped because their files do not exist yet:
 
 - `data/hotspots.parquet`
 - `data/satellite_coverage.csv`
@@ -50,28 +52,28 @@ matplotlib==3.11.2
 - `data/k_factors.csv`
 - `docs/validation/metrics.json`
 
-Query testlerinde seçilen dosya `data/mock/hotspots_mock.parquet` idi
-(`mock=True`). Bu sonuç gerçek veriyle uçtan uca doğrulama veya bilimsel başarı
-iddiası değildir. Sentetik sonuçlar sunuma alınmaz.
+In the query tests the selected file was `data/mock/hotspots_mock.parquet`
+(`mock=True`). This result is not an end-to-end validation with real data or a claim
+of scientific success. Synthetic results are not taken into the presentation.
 
-## P6 kontrolünün yeniden çalıştırılması
+## Re-run of the P6 check
 
-Önceki ülke-yıl indirmesinin CSV kontrol betiği yeni `.venv` içinden yeniden
-çalıştırıldı: 144 dosya, 6.893.939 ham veri satırı; alan sayısı bozuk satır ve
-kontrol edilen temel alanlarda eksik değer yok. Bu dosyalar v1.1 tarihsel
-arşividir; v1.2 yalnız DL_FIRE girdilerini kabul eder. Ingest çalıştırılmadı.
+The CSV check script of the earlier country-year download was re-run from inside the new `.venv`:
+144 files, 6,893,939 raw data rows; no rows with a broken field count and
+no missing values in the checked core fields. These files are the v1.1 historical
+archive; v1.2 accepts only DL_FIRE inputs. Ingest was not run.
 
-## Cloud editöründeki seçim notu
+## Selection note in the Cloud editor
 
-VS Code'da **Python: Select Interpreter** komutundan repo içindeki
-`.venv/bin/python` seçilmelidir. Kullanıcının editör ayarı buradan değiştirilmedi.
+In VS Code, the in-repo `.venv/bin/python` must be selected via the **Python: Select Interpreter**
+command. The user's editor setting was not changed from here.
 
-## Güncel veri ve sunum kuralları
+## Current data and presentation rules
 
-- `argentina` ve `aachen_eifel` bölgeleri; Aachen kutusu
+- `argentina` and `aachen_eifel` regions; Aachen box
   `5.96, 50.44, 6.44, 50.83`.
-- Kaynak DL_FIRE archive + NRT; ülke-yıl CSV'leri kullanılmaz.
-- Uydu eklenme dönemleri 2012/2018/2023; NOAA-21 başlangıcı 2023-03-01,
-  S-NPP bitişi 2026-11-02. Grafik çizgileri verideki
-  `data_info()["satellite_ranges"]` değerlerinden alınır.
-- Geçerli DL_FIRE arşivinin bu çalışma alanına aktarımı henüz yapılmadı.
+- Source DL_FIRE archive + NRT; country-year CSVs are not used.
+- Satellite addition periods 2012/2018/2023; NOAA-21 start 2023-03-01,
+  S-NPP end 2026-11-02. The chart lines are taken from the
+  `data_info()["satellite_ranges"]` values in the data.
+- The transfer of the valid DL_FIRE archive into this workspace has not been done yet.

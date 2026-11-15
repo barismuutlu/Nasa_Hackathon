@@ -1,48 +1,48 @@
-# P3 — ML & Doğrulama: Oğuzhan
+# P3 — ML & Validation: Oğuzhan
 
-Ortak kurallar ve takvim kök `CLAUDE.md`'de, şema **`docs/CONTRACT.md`** (güncel sürüm)'de. Bu dosya sadece senin rolün.
+Shared rules and the schedule are in the root `CLAUDE.md`, the schema is in **`docs/CONTRACT.md`** (current version). This file covers only your role.
 
-## Sahip olduğun dosyalar (Claude SADECE bunlara yazar)
+## Files you own (Claude writes ONLY to these)
 - `pipeline/validate.py`
-- `docs/validation/` (grafikler + metrikler)
+- `docs/validation/` (plots + metrics)
 
-## Girdi / çıktı
-- Girdi: `data/monthly_grid.parquet`, `data/hotspots_harm.parquet`, `data/k_factors.csv` (P2).
-  P2 hazır olana kadar mock/sample veriyle iskeleti kur.
-- Çıktılar (`docs/validation/`, git'e commit):
+## Input / output
+- Input: `data/monthly_grid.parquet`, `data/hotspots_harm.parquet`, `data/k_factors.csv` (P2).
+  Until P2 is ready, set up the skeleton with mock/sample data.
+- Outputs (`docs/validation/`, commit to git):
   - `metrics.json` — CONTRACT §7.3: `[{"method","region","split","scale","r2","bias","bias_pct","n"}]`
-  - `pred_vs_true.png` — tahmin (`n_harm` VIIRS'ten) vs gerçek (`n_modis`) saçılım, log-log, 1:1 çizgisi
-  - `annual_raw_vs_harm.png` — Arjantin yıllık ham / harmonize / MODIS
-  - `venn_check.png` — Hohes Venn takvim kesiti (Nisan 2011, Ağustos 2026)
+  - `pred_vs_true.png` — predicted (`n_harm` from VIIRS) vs actual (`n_modis`) scatter, log-log, 1:1 line
+  - `annual_raw_vs_harm.png` — Argentina annual raw / harmonized / MODIS
+  - `venn_check.png` — Hohes Venn calendar slice (April 2011, August 2026)
 
-## Görev
-1. **Bölünme** — Eğitim 2012–2021 (P2 k'yı buradan öğrenir), **Test 2022–2024**.
-2. **Tahmin vs gerçek** — test yıllarında hücre × ay bazında:
-   tahmin = VIIRS satırlarının `Σ weight_harm`, gerçek = `n_modis`.
-   - En az bir tarafı > 0 olan hücre-aylar. Ayrıca 1°'ye toplayarak da hesapla (gürültü az).
-3. **Metrikler** — R², bias = ortalama(tahmin − gerçek), bias % = Σ tahmin / Σ gerçek − 1.
-   Arjantin (eğitim bölgesi) ve `aachen_eifel` (transfer) **ayrı ayrı** raporla.
-4. **Venn kontrolü** — Hohes Venn kutusu (lon 5.95–6.25, lat 50.45–50.60):
-   Nisan 2011 (sadece MODIS dönemi) ve Ağustos 2026 (VIIRS) ham + harmonize sayılarda görünüyor mu?
-   O ayın anomali z-skoru ne? Sonuç: evet/hayır + sayılar.
-5. **Zaman kalırsa: Yöntem B** — lojistik regresyon (scikit-learn): VIIRS tespiti için
-   p(aynı gün ±1 km içinde MODIS tespiti var). Özellikler: `frp, brightness, scan, track, daynight,
-   satellite, enlem bandı, mevsim`. (`brightness` MODIS ile VIIRS arasında karşılaştırılamaz, dikkat.) Ağırlık = p / n_active_viirs. Aynı metriklerle A vs B tablosu.
-   → Barış'a söyle; seçilirse P2 entegre eder.
+## Task
+1. **Split** — Training 2012–2021 (P2 learns k from here), **Test 2022–2024**.
+2. **Predicted vs actual** — in the test years, per cell × month:
+   predicted = `Σ weight_harm` of the VIIRS rows, actual = `n_modis`.
+   - Cell-months where at least one side is > 0. Also compute it aggregated to 1° (less noise).
+3. **Metrics** — R², bias = mean(predicted − actual), bias % = Σ predicted / Σ actual − 1.
+   Report Argentina (training region) and `aachen_eifel` (transfer) **separately**.
+4. **Venn check** — Hohes Venn box (lon 5.95–6.25, lat 50.45–50.60):
+   are April 2011 (MODIS-only period) and August 2026 (VIIRS) visible in the raw + harmonized counts?
+   What is that month's anomaly z-score? Result: yes/no + numbers.
+5. **If time allows: Method B** — logistic regression (scikit-learn): for a VIIRS detection,
+   p(there is a MODIS detection on the same day within ±1 km). Features: `frp, brightness, scan, track, daynight,
+   satellite, latitude band, season`. (Careful: `brightness` is not comparable between MODIS and VIIRS.) Weight = p / n_active_viirs. A vs B table with the same metrics.
+   → tell Barış; if chosen, P2 integrates it.
 
-## Teslimler
-| Saat | Ne | Kime |
+## Submissions
+| Time | What | To whom |
 |---|---|---|
-| 17:30 | Metriklerin ilk hali (Yöntem A) | Barış |
-| 19:00 | `docs/validation/` tamamı + 3 cümlelik özet ("R²=…, bias=…, Venn görünüyor") | İbrahim (P6) |
+| 17:30 | First version of the metrics (Method A) | Barış |
+| 19:00 | All of `docs/validation/` + 3-sentence summary ("R²=…, bias=…, Venn visible") | İbrahim (P6) |
 
-## Bitti kontrolü
-- [ ] Test yılları hiçbir şekilde k hesabına girmedi (P2 ile teyit)
-- [ ] Grafikler sunuma hazır: eksen etiketleri, birimler, büyük font, başlık
-- [ ] `python pipeline/validate.py` tek komutla tüm çıktıları yeniden üretiyor
+## Done check
+- [ ] The test years did not enter the k computation in any way (confirm with P2)
+- [ ] Plots ready for the presentation: axis labels, units, large font, title
+- [ ] `python pipeline/validate.py` regenerates all outputs with a single command
 
-## Claude'a not
-- `harmonize.py`'yi değiştirme; k yöntemi hakkında öneri varsa kullanıcıya not olarak ver.
-- Grafiklerde matplotlib, renk haritası viridis (uygulamayla tutarlı).
-- R² negatif/çok düşük çıkarsa saklama — kullanıcıya açıkça söyle; pitch'te dürüstçe anlatılır.
-- Venn sonucunu "tespit artışı" olarak yaz, "yangın tespit edildi" değil (CONTRACT §8).
+## Note for Claude
+- Do not change `harmonize.py`; if there is a suggestion about the k method, give it to the user as a note.
+- matplotlib for the plots, colormap viridis (consistent with the app).
+- If R² comes out negative/very low, do not hide it — tell the user clearly; it is explained honestly in the pitch.
+- Write the Venn result as "detection increase", not "fire detected" (CONTRACT §8).
