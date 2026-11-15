@@ -5,7 +5,7 @@
 ![FireWatch: one consistent fire-detection record from MODIS and VIIRS](docs/img/firewatch_banner.png)
 <sub>Concept illustration (AI-generated), not data.</sub>
 
-> **Live demo:** https://firewatch.barismutlu.de · **Backup:** https://activefiredetectioncalendar.streamlit.app/
+> **Live demo:** https://firewatch.barismutlu.de 
 
 NASA's 25-year fire record was built by a changing fleet of satellites. MODIS (Terra 2000, Aqua 2002)
 is nearing the end of its mission; the VIIRS instruments (Suomi NPP 2012, NOAA-20 2018, NOAA-21 2023)
