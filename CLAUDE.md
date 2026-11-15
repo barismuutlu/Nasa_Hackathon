@@ -1,198 +1,198 @@
-# CLAUDE.md — Space Apps 2026: MODIS ↔ VIIRS Yangın Takvimi
+# CLAUDE.md — Space Apps 2026: MODIS ↔ VIIRS Fire Calendar
 
-> Bu dosya tüm ekip için ortaktır. Sahibi: **P4 Barış**. Değişiklik → önce Barış'a sor.
+> This file is shared by the whole team. Owner: **P4 Barış**. Change → ask Barış first.
 
-## 0. Claude için ilk adım (ZORUNLU)
-1. Kullanıcının rolünü `CLAUDE.local.md` dosyasından öğren (gitignore'da, herkesin kendi makinesinde).
-2. `CLAUDE.local.md` yoksa kullanıcıya **"Hangi roldesin (P1–P6)?"** diye sor, sonra
-   `ekip/` altındaki ilgili dosyayı oku ve kullanıcıya şu içerikle `CLAUDE.local.md` oluşturmayı öner:
+## 0. First step for Claude (MANDATORY)
+1. Learn the user's role from the `CLAUDE.local.md` file (in gitignore, on everyone's own machine).
+2. If `CLAUDE.local.md` does not exist, ask the user **"Which role are you (P1–P6)?"**, then
+   read the corresponding file under `ekip/` and suggest the user create `CLAUDE.local.md` with this content:
    ```
    @ekip/P1_Suleyman.CLAUDE.md
    ```
-3. **Sadece o rolün sahip olduğu dosyalara yaz.** Başka birinin dosyasında değişiklik gerekiyorsa
-   kodu yazma; kullanıcıya "şu kişiye şunu söyle" diye kısa bir not ver.
-4. Şema veya API (`docs/CONTRACT.md`) değişikliği gerekiyorsa: dur, kullanıcıya "önce P4'e sor" de.
-5. Başkasına etki eden her teslimde **§8 Teslim Protokolü**'nü uygula (test → onay → push → prompt).
-6. Kullanıcı `[Px İsim → Py İsim]` başlıklı bir prompt yapıştırırsa: önce `git pull --rebase`,
-   sonra prompttaki KONTROL adımını çalıştır, sonucu kullanıcıya göster, ardından YAPMAN GEREKEN'e geç.
+3. **Write only to the files that role owns.** If a change is needed in someone else's file,
+   do not write the code; give the user a short note: "tell this person this".
+4. If a schema or API (`docs/CONTRACT.md`) change is needed: stop, tell the user "ask P4 first".
+5. For every submission that affects someone else, apply the **§8 Submission Protocol** (test → approval → push → prompt).
+6. If the user pastes a prompt with a `[Px Name → Py Name]` header: first `git pull --rebase`,
+   then run the CHECK step in the prompt, show the result to the user, then move on to WHAT YOU NEED TO DO.
 
-## 1. Proje
-NASA FIRMS aktif yangın **tespitleri** ile 2000–2026 arası **tutarlı bir aylık tespit takvimi**.
-Sorun: MODIS (Terra/Aqua, 2000→) ve VIIRS (S-NPP 2012→2026-11-02, NOAA-20 2018→, NOAA-21 2023→) farklı
-hassasiyette; her yeni uydu ham sayılarda **yapay sıçrama** yaratır. Biz VIIRS tespitlerini
-**MODIS-eşdeğeri** birime çevirip (harmonizasyon) kesintisiz bir seri gösteriyoruz.
-Harmonizasyon katsayıları **doğrulanmamış bir hipotezdir**; P3'ün test metrikleri (2022–2024)
-gelmeden "doğru/kalibre" diye sunulmaz, metrikler geldikten sonra da sayılarıyla birlikte sunulur.
+## 1. Project
+A **consistent monthly detection calendar** for 2000–2026 from NASA FIRMS active fire **detections**.
+Problem: MODIS (Terra/Aqua, 2000→) and VIIRS (S-NPP 2012→2026-11-02, NOAA-20 2018→, NOAA-21 2023→) have different
+sensitivities; every new satellite creates an **artificial jump** in the raw counts. We convert VIIRS detections
+into **MODIS-equivalent** units (harmonization) and show a continuous series.
+The harmonization coefficients are **an unvalidated hypothesis**; until P3's test metrics (2022–2024)
+arrive they are not presented as "correct/calibrated", and after the metrics arrive they are presented together with their numbers.
 
-Pitch'in ana görseli: ham takvimde 2012/2018/2023 sıçramaları → harmonize takvimde yok.
-Doğrulama hikâyesi: Hohes Venn'de bilinen yangın olaylarıyla örtüşen tespit artışları
-**Nisan 2011** ve **Ağustos 2026**'da takvimde görünmeli. (Tespit ≠ doğrulanmış yangın olayı.)
+Main visual of the pitch: 2012/2018/2023 jumps in the raw calendar → absent in the harmonized calendar.
+Validation story: detection increases that coincide with known fire events in the Hohes Venn
+should appear in the calendar in **April 2011** and **August 2026**. (Detection ≠ validated fire event.)
 
-## 2. Ekip & dosya sahipliği
-| Rol | Kişi | Sahip olduğu dosyalar |
+## 2. Team & file ownership
+| Role | Person | Files owned |
 |---|---|---|
-| P1 Veri Mühendisi | Süleyman | `pipeline/ingest.py`, `pipeline/weather_power.py` (NASA POWER, deneysel), `pipeline/burned_area_check.py` (MCD64A1 destekleyici kontrol, ana şemaya dokunmaz), `data/sample/` |
-| P2 Harmonizasyon | Bahtiyar | `pipeline/harmonize.py`, `forecast/` (aylık prototip, EXPERIMENTAL; uygulamadaki 30 günlük görünüm `pipeline/forecast.py`) |
-| P3 ML & Doğrulama | Oğuzhan | `pipeline/validate.py`, `docs/validation/` |
-| P4 Veri Katmanı + LİDER | Barış | `app/query.py`, `pipeline/forecast.py` (deneysel görünüm), `docs/forecast/`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `README.md`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
-| P5 Arayüz | Yusuf | `app/app.py`, `.streamlit/config.toml` |
-| P6 Sunum & Test | İbrahim | `docs/pitch/` |
+| P1 Data Engineer | Süleyman | `pipeline/ingest.py`, `pipeline/weather_power.py` (NASA POWER, experimental), `pipeline/burned_area_check.py` (MCD64A1 supporting check, does not touch the main schema), `data/sample/` |
+| P2 Harmonization | Bahtiyar | `pipeline/harmonize.py`, `forecast/` (monthly prototype, EXPERIMENTAL; the 30-day view in the app is `pipeline/forecast.py`) |
+| P3 ML & Validation | Oğuzhan | `pipeline/validate.py`, `docs/validation/` |
+| P4 Data Layer + LEAD | Barış | `app/query.py`, `pipeline/forecast.py` (experimental view), `docs/forecast/`, `contract.py`, `docs/CONTRACT.md`, `tests/`, `README.md`, `CLAUDE.md`, `ekip/`, `requirements.txt`, `.gitignore`, `data/mock/`, `data/deploy/` |
+| P5 Interface | Yusuf | `app/app.py`, `.streamlit/config.toml` |
+| P6 Presentation & Testing | İbrahim | `docs/pitch/` |
 
-Ortak dosyalara (`requirements.txt` vb.) paket eklemek gerekirse → Barış'a söyle, o ekler.
+If a package needs to be added to shared files (`requirements.txt` etc.) → tell Barış; Barış adds it.
 
-**Ek yetki (P4 onayı, 14 Kas):** P2 Bahtiyar: freeze'e kadar `app/` ve `docs/pitch/`'e sadece `p2/*` branch'i ile
-katkı; merge dosya sahibinde (Yusuf / İbrahim). `app/app.py`'ye başlamadan önce Yusuf'a hangi bölüm olduğunu yazar.
-P3 Oğuzhan 14 Kas akşamı erken ayrıldı, 15 Kas'ta tekrar ekipte; `pipeline/validate.py` ve `docs/validation/` P3'te.
+**Additional permission (P4 approval, 14 Nov):** P2 Bahtiyar: until the freeze, contributes to `app/` and `docs/pitch/` only via a `p2/*` branch;
+merge is up to the file owner (Yusuf / İbrahim). Before starting on `app/app.py`, Bahtiyar tells Yusuf which section it is.
+P3 Oğuzhan left early on the evening of 14 Nov, back on the team on 15 Nov; `pipeline/validate.py` and `docs/validation/` stay with P3.
 
-## 3. Veri sözleşmesi (KİLİTLİ — değişiklik sadece P4 onayıyla; sürüm: `docs/CONTRACT.md` başlığı)
-Tam şema, tekrar kuralları, bölge adları, pipeline girdi/çıktıları ve `query.py` API'si:
-**`docs/CONTRACT.md`** (aşağıda içe aktarılıyor). Kod karşılığı: **`contract.py`**
-(sabitler + `validate_hotspots(df, stage)`). P1 ve P2 parquet yazmadan önce doğrulayıcıyı çağırır.
+## 3. Data contract (LOCKED — changes only with P4 approval; version: header of `docs/CONTRACT.md`)
+Full schema, repetition rules, region names, pipeline inputs/outputs and the `query.py` API:
+**`docs/CONTRACT.md`** (imported below). Code counterpart: **`contract.py`**
+(constants + `validate_hotspots(df, stage)`). P1 and P2 call the validator before writing parquet.
 
 @docs/CONTRACT.md
 
-Hatırlatma (en sık hata):
-- Sütunlar FIRMS adlarıyla: `latitude`, `longitude`, `brightness`, `confidence` (**orijinal değer**),
-  `type`. Sınıf için `confidence_class`.
-- Bir satır = bir **tespit** (termal anomali), doğrulanmış yangın olayı değil (CONTRACT §8).
-- `weight_harm` ingest'te NaN; yöntemi P2'nin, doğrulaması P3'ün (CONTRACT §6).
+Reminder (most common mistake):
+- Columns use FIRMS names: `latitude`, `longitude`, `brightness`, `confidence` (**original value**),
+  `type`. For the class, `confidence_class`.
+- One row = one **detection** (thermal anomaly), not a validated fire event (CONTRACT §8).
+- `weight_harm` is NaN at ingest; the method belongs to P2, its validation to P3 (CONTRACT §6).
 
-### 3.1 Dosya konumları
+### 3.1 File locations
 ```
-contract.py       şema sabitleri + doğrulayıcı (P4)
-data/raw/<region>/  FIRMS CSV'leri, klasör adı = region slug'ı (git'e GİRMEZ)
-data/sample/      P1'in örnek dosyası (küçük, git'e girer)
-data/mock/        P4'ün sentetik parquet'i + üretici (git'e girer)
-data/deploy/      Streamlit Cloud için küçültülmüş veri (<50 MB, git'e girer)
-data/*.parquet, data/*.csv   tam veri ve ara çıktılar (git'e GİRMEZ — Drive/USB)
-docs/CONTRACT.md  sözleşme (P4)
-docs/validation/  P3 çıktıları (png + metrics.json)
-docs/forecast/    P4 deneysel görünüm çıktıları (CONTRACT §7.5)
+contract.py       schema constants + validator (P4)
+data/raw/<region>/  FIRMS CSVs, folder name = region slug (does NOT go into git)
+data/sample/      P1's sample file (small, goes into git)
+data/mock/        P4's synthetic parquet + generator (goes into git)
+data/deploy/      reduced data for Streamlit Cloud (<50 MB, goes into git)
+data/*.parquet, data/*.csv   full data and intermediate outputs (does NOT go into git — Drive/USB)
+docs/CONTRACT.md  contract (P4)
+docs/validation/  P3 outputs (png + metrics.json)
+docs/forecast/    P4 experimental view outputs (CONTRACT §7.5)
 docs/pitch/       P6
-tests/smoke_test.py  uçtan uca duman testi (P4)
+tests/smoke_test.py  end-to-end smoke test (P4)
 ```
 
-### 3.2 Paylaşılan modülü içe aktarma
-`pipeline/*.py` ve `app/*.py` kök dizini import yoluna ekleyerek `contract`'ı kullanır:
+### 3.2 Importing the shared module
+`pipeline/*.py` and `app/*.py` use `contract` by adding the root directory to the import path:
 ```python
 import sys; from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from contract import validate_hotspots
 ```
 
-## 4. Ortam ve çalıştırma
-### 4.1 Herkes AYNI ortamı kullanır (ZORUNLU)
-- **Python 3.12** (`.python-version`) + `requirements.txt`'teki **sabit (==) sürümler**.
-  Sebep: pandas 2 ↔ 3 gibi farklar aynı kodda farklı dtype üretir → `contract.py` doğrulaması
-  bir makinede geçer, diğerinde patlar. Streamlit Cloud da 3.12 ile yayınlanır.
-- Kurulum `uv` ile (Python 3.12'yi kendisi indirir, yönetici izni gerekmez):
+## 4. Environment and running
+### 4.1 Everyone uses the SAME environment (MANDATORY)
+- **Python 3.12** (`.python-version`) + the **pinned (==) versions** in `requirements.txt`.
+  Reason: differences like pandas 2 ↔ 3 produce different dtypes from the same code → `contract.py` validation
+  passes on one machine and blows up on another. Streamlit Cloud also deploys with 3.12.
+- Installation with `uv` (downloads Python 3.12 itself, no admin rights needed):
   ```bash
-  # uv yoksa:  Linux/Mac: curl -LsSf https://astral.sh/uv/install.sh | sh
-  #            Windows (PowerShell): powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  # if uv is missing:  Linux/Mac: curl -LsSf https://astral.sh/uv/install.sh | sh
+  #                    Windows (PowerShell): powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
   uv venv --python 3.12 .venv
   source .venv/bin/activate            # Windows: .venv\Scripts\activate
   uv pip install -r requirements.txt
-  python tests/smoke_test.py           # ilk satır: "ortam: Python 3.12 + requirements.txt sürümleri" ✅
+  python tests/smoke_test.py           # first line (program output, Turkish): "ortam: Python 3.12 + requirements.txt sürümleri" ✅
   ```
-- Claude: kod çalıştırmadan önce `.venv` aktif mi ve Python 3.12 mi kontrol et. Değilse kurulumu
-  kullanıcıya hatırlat; sistem Python'uyla ya da `pip install <paket>` ile devam etme.
-- Ek ortam: `requirements-enrich.txt` (sadece `pipeline/burned_area_check.py`, P1; `pyhdf`). Ana uygulama,
-  `app/` ve `tests/` bu paketleri ASLA import etmez; Streamlit Cloud kurmaz.
-- Paket ekleme/sürüm değiştirme sadece P4 (`requirements.txt`). Değişince herkes
-  `uv pip install -r requirements.txt` çalıştırır.
+- Claude: before running code, check that `.venv` is active and that it is Python 3.12. If not, remind
+  the user of the installation; do not continue with the system Python or with `pip install <package>`.
+- Extra environment: `requirements-enrich.txt` (only `pipeline/burned_area_check.py`, P1; `pyhdf`). The main app,
+  `app/` and `tests/` NEVER import these packages; Streamlit Cloud does not install them.
+- Adding packages/changing versions is P4 only (`requirements.txt`). When it changes, everyone
+  runs `uv pip install -r requirements.txt`.
 
-### 4.2 Çalıştırma
+### 4.2 Running
 ```bash
 source .venv/bin/activate
 python pipeline/ingest.py        # P1 → data/hotspots.parquet
 python pipeline/harmonize.py     # P2 → data/hotspots_harm.parquet, monthly_grid.parquet, k_factors.csv
 python pipeline/validate.py      # P3 → docs/validation/
-python pipeline/forecast.py      # P4 → data/deploy/forecast.parquet, docs/forecast/ (deneysel)
-python tests/smoke_test.py       # P4 → sözleşme + query uçtan uca kontrol
+python pipeline/forecast.py      # P4 → data/deploy/forecast.parquet, docs/forecast/ (experimental)
+python tests/smoke_test.py       # P4 → contract + query end-to-end check
 streamlit run app/app.py         # P5
 ```
-Tüm script'ler **repo kökünden** çalıştırılır; yollar köke göreli.
+All scripts are run **from the repo root**; paths are relative to the root.
 
-## 5. Kod kuralları
-- Python 3.12 (§4.1), pandas 3 + pyarrow. Kod/değişken isimleri İngilizce, yorumlar Türkçe olabilir.
-- Her pipeline script'i: `main()` + `if __name__ == "__main__":`, başta yol sabitleri.
-- Sessiz hata yok: beklenmeyen sütun/değer → açık `ValueError`.
-- Büyük veriyi tek seferde belleğe alma gerekiyorsa `pyarrow`/`usecols` kullan.
-- Yeni paket gerekirse ekleme, kullanıcıya "Barış'a söyle" de.
+## 5. Code rules
+- Python 3.12 (§4.1), pandas 3 + pyarrow. Code/variable names in English, comments may be in Turkish.
+- Every pipeline script: `main()` + `if __name__ == "__main__":`, path constants at the top.
+- No silent errors: unexpected column/value → explicit `ValueError`.
+- If large data has to be loaded into memory at once, use `pyarrow`/`usecols`.
+- If a new package is needed, do not add it; tell the user "tell Barış".
 
-## 6. Git kuralları
-- Commit'ten önce: `git pull --rebase`
-- 30–60 dk'da bir küçük commit; mesaj: `P1: archive+nrt birleştirme` gibi rol önekli.
-- Sadece kendi dosyalarını `git add` et (`git add -A` YOK).
-- Ajan (Claude) kodunu commit'ten önce oku ve en az bir kez çalıştır.
-- Veri dosyası (`data/raw`, büyük parquet) asla commit'lenmez.
-- Başkasını etkileyen push'lar §8'e göre yapılır.
+## 6. Git rules
+- Before committing: `git pull --rebase`
+- A small commit every 30–60 min; message with a role prefix, like `P1: merge archive+nrt`.
+- `git add` only your own files (NO `git add -A`).
+- Read the agent's (Claude's) code before committing and run it at least once.
+- Data files (`data/raw`, large parquet) are never committed.
+- Pushes that affect others are done according to §8.
 
-## 7. Takvim (Cumartesi 14 Kasım → Pazar 15 Kasım 2026)
-| Saat | Kontrol noktası | Durum |
+## 7. Schedule (Saturday 14 November → Sunday 15 November 2026)
+| Time | Checkpoint | Status |
 |---|---|---|
-| 08:55 | P4: repo iskeleti push | ✅ |
-| 10:30 | Roller + şema + repo hazır (5 dk toplantı) | ✅ |
+| 08:55 | P4: push repo skeleton | ✅ |
+| 10:30 | Roles + schema + repo ready (5 min meeting) | ✅ |
 | 11:00 | P4: mock parquet → P5 | ✅ |
-| 11:30 | P1: örnek dosya (1 bölge, 1 yıl) | ✅ |
-| 12:30 | P1: tam veri | ✅ |
-| 13:00 | Gerçek veri herkeste, mock uygulama ayakta | ✅ |
-| 16:30 | Ham takvim uçtan uca (P2 harmonize veri, P4 gerçek veri) | ✅ (erken) |
-| 19:00 | Harmonize MVP (P3 doğrulama → P6) | ✅ (erken) |
-| — | Streamlit Cloud (`data/deploy/`, gerçek + harmonize veri) | ✅ (Pazar sabahı yerine Cumartesi) |
-| Pazar 09:15 | Jüri kriterleri gözden geçirme | |
-| Pazar 12:00 | ❄️ FEATURE FREEZE — sadece bug fix | |
-| Pazar 14:00 | Sunum hazır | |
-| Pazar 14:30 | 📤 TESLİM (son saat 15:00) | |
+| 11:30 | P1: sample file (1 region, 1 year) | ✅ |
+| 12:30 | P1: full data | ✅ |
+| 13:00 | Real data with everyone, mock app up and running | ✅ |
+| 16:30 | Raw calendar end-to-end (P2 harmonized data, P4 real data) | ✅ (early) |
+| 19:00 | Harmonized MVP (P3 validation → P6) | ✅ (early) |
+| — | Streamlit Cloud (`data/deploy/`, real + harmonized data) | ✅ (Saturday instead of Sunday morning) |
+| Sunday 09:15 | Review of judging criteria | |
+| Sunday 12:00 | ❄️ FEATURE FREEZE — bug fixes only | |
+| Sunday 14:00 | Presentation ready | |
+| Sunday 14:30 | 📤 SUBMISSION (deadline 15:00) | |
 
-**Takıldın mı? 15 dk'dan fazla uğraşma, söyle.** Claude: kullanıcı aynı hatada 15 dk'yı geçtiyse
-bunu hatırlat ve "Barış'a yaz" öner.
+**Stuck? Don't spend more than 15 min on it, say so.** Claude: if the user has spent more than 15 min on the same error,
+remind them of this and suggest "write to Barış".
 
-## 8. Teslim Protokolü — her önemli adımda (ZORUNLU)
-**Önemli adım** = başka birinin işini etkileyen her teslim: §7'deki teslimler, şema/API değişikliği,
-başkasının kullanacağı yeni dosya/fonksiyon, birinin beklediği bug fix.
-Üç adım sırayla yapılır; **kullanıcının açık onayı olmadan push yok.**
+## 8. Submission Protocol — at every important step (MANDATORY)
+**Important step** = every submission that affects someone else's work: the submissions in §7, schema/API changes,
+a new file/function someone else will use, a bug fix someone is waiting for.
+The three steps are done in order; **no push without the user's explicit approval.**
 
-### Adım 1 — Kullanıcıya test ettir, onay al
-- İş bittiğinde Claude push ETMEZ. Kullanıcıya kısa bir test listesi verir:
-  - çalıştırılacak komut(lar), kopyala-yapıştır hazır
-  - her komut için **beklenen sonuç** (sayı, tablo, ekranda ne görünmeli)
-  - rol dosyasındaki "Bitti kontrolü" maddelerinden ilgili olanlar
-- Kullanıcı kendisi çalıştırır / bakar. "Onay", "tamam push et" gibi **açık onay** gelene kadar
-  Adım 2'ye geçilmez. Sorun bildirilirse düzelt → Adım 1'i tekrarla.
-- Claude kendi testlerini de çalıştırabilir ama "testlerim geçti" kullanıcı onayının yerine geçmez.
+### Step 1 — Have the user test it, get approval
+- When the work is done, Claude does NOT push. It gives the user a short test list:
+  - command(s) to run, ready to copy-paste
+  - for each command the **expected result** (number, table, what should appear on screen)
+  - the relevant items from the "Done check" in the role file
+- The user runs / looks at it themselves. Step 2 is not started until **explicit approval** such as "approved", "ok push it"
+  arrives. If a problem is reported, fix it → repeat Step 1.
+- Claude may also run its own tests, but "my tests passed" does not replace the user's approval.
 
-### Adım 2 — Değişiklik türüne göre GitHub'a gönder
-| Tür | Örnek | Yöntem |
+### Step 2 — Send to GitHub according to the type of change
+| Type | Example | Method |
 |---|---|---|
-| Küçük | kendi dosyanda iyileştirme, tek dosyalık bug fix | `main`'de commit → `git pull --rebase` → `git push` |
-| Yapısal | şema / API (`docs/CONTRACT.md`), ortak dosya (`CLAUDE.md`, `requirements.txt`), yeni çıktı dosyası, birden çok dosya | `git switch -c <rol>/<konu>` (ör. `p4/query-api`) → commit(ler) → `git switch main` → `git pull --rebase` → `git merge --no-ff <dal>` → `git push` → `git branch -d <dal>` |
-- Sadece kendi dosyalarını `git add` et. Commit mesajı: rol öneki + ne değişti + kimi etkiler.
-- Şema/API'ye dokunan yapısal değişiklik → önce P4 onayı (§0 madde 4).
-- Merge çakışması çıkarsa **çözmeye çalışma**: dur, kullanıcıya hangi dosyada ve kiminle çakıştığını söyle.
-- Push sonrası kısa commit hash'ini al (`git log --oneline -1`).
+| Small | improvement in your own file, single-file bug fix | commit on `main` → `git pull --rebase` → `git push` |
+| Structural | schema / API (`docs/CONTRACT.md`), shared file (`CLAUDE.md`, `requirements.txt`), new output file, multiple files | `git switch -c <role>/<topic>` (e.g. `p4/query-api`) → commit(s) → `git switch main` → `git pull --rebase` → `git merge --no-ff <branch>` → `git push` → `git branch -d <branch>` |
+- `git add` only your own files. Commit message: role prefix + what changed + whom it affects.
+- Structural change touching the schema/API → P4 approval first (§0 item 4).
+- If a merge conflict occurs, **do not try to resolve it**: stop, tell the user in which file and with whom the conflict is.
+- After the push, get the short commit hash (`git log --oneline -1`).
 
-### Adım 3 — Etkilenen arkadaşın Claude'u için prompt yaz
-Push'tan sonra etkilenen **her kişi için ayrı**, tek kod bloğunda, kopyala-yapıştır hazır prompt yaz.
-Alıcı Claude bu sohbeti görmedi: dosya yolları, fonksiyon adları ve CLAUDE.md bölüm numaraları
-açıkça yazılmalı, prompt tek başına anlaşılır olmalı. Şablon:
+### Step 3 — Write a prompt for the affected teammate's Claude
+After the push, write a prompt **separately for each** affected person, in a single code block, ready to copy-paste.
+The receiving Claude has not seen this conversation: file paths, function names and CLAUDE.md section numbers
+must be written out explicitly, and the prompt must be understandable on its own. Template:
 ```
-[P4 Barış → P5 Yusuf] <konu> — commit <hash>
+[P4 Barış → P5 Yusuf] <topic> — commit <hash>
 
-ÖNCE: git pull --rebase
+FIRST: git pull --rebase
 
-NE DEĞİŞTİ:
-- <dosya>: <değişiklik>
+WHAT CHANGED:
+- <file>: <change>
 
-SENİN İÇİN ANLAMI:
-- <alıcının işini nasıl etkiliyor>
+WHAT IT MEANS FOR YOU:
+- <how it affects the receiver's work>
 
-YAPMAN GEREKEN:
-1. <somut adım>
+WHAT YOU NEED TO DO:
+1. <concrete step>
 
-KONTROL (çalıştır, sonucu kullanıcıya göster):
-- <komut>  →  beklenen: <sonuç>
+CHECK (run it, show the result to the user):
+- <command>  →  expected: <result>
 
-DOKUNMA: <alıcının sahibi olmadığı dosyalar>. Sorun varsa kod yazma, <gönderen>'e bildir.
+DO NOT TOUCH: <files the receiver does not own>. If there is a problem, do not write code, notify <sender>.
 ```
-Prompt sohbette verilir; kullanıcı WhatsApp/Discord ile ilgili kişiye iletir.
+The prompt is given in the chat; the user forwards it to the person concerned via WhatsApp/Discord.

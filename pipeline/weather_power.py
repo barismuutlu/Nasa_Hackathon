@@ -1,28 +1,28 @@
-"""NASA POWER günlük hava verisi → 1° hücre × ay tablosu — sahibi P1 Süleyman.
+"""NASA POWER daily weather data → 1° cell × month table — owner P1 Süleyman.
 
-Amaç: P4'ün DENEYSEL "2 ay sonrası tespit görünümü" modeline (pipeline/forecast.py) yerel hava
-(kuraklık) girdisi. Sözleşmeye v1.5'te P4 ekleyecek; çıktı sütunları aşağıdaki gibi SABİT.
+Purpose: local weather (drought) input for P4's EXPERIMENTAL "detection outlook 2 months ahead" model
+(pipeline/forecast.py). P4 will add it to the contract in v1.5; the output columns are FIXED as below.
 
-Hücreler: data/hotspots.parquet içinde region == "argentina" satırlarından
-          cell_lat = floor(latitude) + 0.5, cell_lon = floor(longitude) + 0.5 (benzersiz çiftler).
-Kaynak:   NASA POWER daily point API (community=AG, hesap gerekmez); hücre başına TEK istek,
-          2003-01-01 → bugün. PRECTOTCORR (mm/gün), T2M_MAX (°C), RH2M (%); -999 = eksik.
-          Değer, hücre merkezini içeren MERRA-2 kutusundan (0.5° × 0.625°) gelir — 1° hücrenin
-          ortalaması DEĞİLDİR. Günler POWER'ın yerel güneş zamanı (LST) günleridir.
-Ham yanıt: data/raw/power/<cell_lat>_<cell_lon>.csv (git'e GİRMEZ). Dosya varsa tekrar indirilmez:
-          yarıda kalırsa tekrar çalıştır, kaldığı yerden devam eder. (ingest.py bu klasörü atlar.)
+Cells:    from rows with region == "argentina" in data/hotspots.parquet
+          cell_lat = floor(latitude) + 0.5, cell_lon = floor(longitude) + 0.5 (unique pairs).
+Source:   NASA POWER daily point API (community=AG, no account needed); ONE request per cell,
+          2003-01-01 → today. PRECTOTCORR (mm/day), T2M_MAX (°C), RH2M (%); -999 = missing.
+          The value comes from the MERRA-2 box (0.5° × 0.625°) containing the cell center — it is NOT
+          the average of the 1° cell. Days are POWER's local solar time (LST) days.
+Raw response: data/raw/power/<cell_lat>_<cell_lon>.csv (NOT committed to git). Existing files are not re-downloaded:
+          if interrupted, run again and it resumes where it left off. (ingest.py skips this folder.)
 
-Çıktı: data/weather_power.parquet (git'e GİRMEZ), sütunlar bu sırayla:
+Output: data/weather_power.parquet (NOT committed to git), columns in this order:
   cell_lat float64, cell_lon float64, year int16, month int8,
-  prec_mm  float64  aylık TOPLAM yağış (mm)
-  tmax_c   float64  günlük maksimum sıcaklıkların aylık ortalaması (°C)
-  rh_pct   float64  aylık ortalama bağıl nem (%)
-  n_days   int16    üç parametresi de geçerli olan gün sayısı
-  Üç değer de yalnız bu n_days günden hesaplanır. n_days < ayın gün sayısı → kısmi ay
-  (içinde bulunduğumuz ay böyle; prec_mm o ay için tam ay toplamı değildir). n_days = 0 → değerler NaN.
+  prec_mm  float64  monthly TOTAL precipitation (mm)
+  tmax_c   float64  monthly mean of daily maximum temperatures (°C)
+  rh_pct   float64  monthly mean relative humidity (%)
+  n_days   int16    number of days on which all three parameters are valid
+  All three values are computed ONLY from these n_days days. n_days < days in month → partial month
+  (the current month is like this; prec_mm is not a full-month total for it). n_days = 0 → values are NaN.
 
-Çalıştır (repo kökünden):  python pipeline/weather_power.py
-                           python pipeline/weather_power.py --one   # sadece La Rioja hücresi, parquet yazmaz
+Run (from repo root):  python pipeline/weather_power.py
+                       python pipeline/weather_power.py --one   # La Rioja cell only, does not write parquet
 """
 from __future__ import annotations
 
@@ -41,13 +41,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ---------------------------------------------------------------- yol sabitleri
+# ---------------------------------------------------------------- path constants
 ROOT = Path(__file__).resolve().parents[1]
 HOTSPOTS_PATH = ROOT / "data" / "hotspots.parquet"
 RAW_DIR = ROOT / "data" / "raw" / "power"
 OUT_PATH = ROOT / "data" / "weather_power.parquet"
 
-# ---------------------------------------------------------------- istek ayarları
+# ---------------------------------------------------------------- request settings
 REGION = "argentina"
 START = date(2003, 1, 1)
 PARAMS = ["PRECTOTCORR", "T2M_MAX", "RH2M"]
@@ -59,7 +59,7 @@ MAX_WORKERS = 4
 RETRIES = 3
 RETRY_WAIT_S = 5
 TIMEOUT_S = 120
-LA_RIOJA = (-29.5, -66.5)  # (cell_lat, cell_lon) — stdout kontrolü ve --one
+LA_RIOJA = (-29.5, -66.5)  # (cell_lat, cell_lon) — stdout check and --one
 
 OUT_SCHEMA = {
     "cell_lat": "float64", "cell_lon": "float64", "year": "int16", "month": "int8",
@@ -68,7 +68,7 @@ OUT_SCHEMA = {
 NET_ERRORS = (urllib.error.URLError, TimeoutError, ConnectionError, http.client.HTTPException)
 
 
-# ---------------------------------------------------------------- hücreler
+# ---------------------------------------------------------------- cells
 def argentina_cells() -> list[tuple[float, float]]:
     if not HOTSPOTS_PATH.exists():
         raise FileNotFoundError(f"{HOTSPOTS_PATH.relative_to(ROOT)} yok → önce python pipeline/ingest.py")
@@ -86,12 +86,12 @@ def raw_path(cell: tuple[float, float]) -> Path:
     return RAW_DIR / f"{cell[0]}_{cell[1]}.csv"
 
 
-# ---------------------------------------------------------------- ayrıştırma
+# ---------------------------------------------------------------- parsing
 _LOC = re.compile(r"latitude\s+(-?\d+(?:\.\d+)?)\s+longitude\s+(-?\d+(?:\.\d+)?)")
 
 
 def parse_power_csv(text: str, cell: tuple[float, float]) -> pd.DataFrame:
-    """POWER CSV yanıtı → günlük tablo (date + PARAMS, -999 → NaN). Beklenmeyen biçim → ValueError."""
+    """POWER CSV response → daily table (date + PARAMS, -999 → NaN). Unexpected format → ValueError."""
     tag = f"POWER {cell[0]}_{cell[1]}"
     lines = text.splitlines()
     try:
@@ -123,7 +123,7 @@ def parse_power_csv(text: str, cell: tuple[float, float]) -> pd.DataFrame:
 
 
 def monthly(daily: pd.DataFrame, cell: tuple[float, float]) -> pd.DataFrame:
-    """Günlük → aylık. Değerler yalnız üç parametresi de geçerli günlerden; geçerli günü olmayan ay NaN."""
+    """Daily → monthly. Values only from days on which all three parameters are valid; a month with no valid day is NaN."""
     valid = daily[daily[PARAMS].notna().all(axis=1)]
     agg = (valid.groupby([valid["date"].dt.year.rename("year"), valid["date"].dt.month.rename("month")])
            .agg(prec_mm=("PRECTOTCORR", "sum"), tmax_c=("T2M_MAX", "mean"),
@@ -137,7 +137,7 @@ def monthly(daily: pd.DataFrame, cell: tuple[float, float]) -> pd.DataFrame:
     return agg
 
 
-# ---------------------------------------------------------------- indirme
+# ---------------------------------------------------------------- download
 def fetch(cell: tuple[float, float], end: date) -> str:
     url = URL.format(params=",".join(PARAMS), lat=cell[0], lon=cell[1],
                      start=START.strftime("%Y%m%d"), end=end.strftime("%Y%m%d"))
@@ -154,9 +154,9 @@ def fetch(cell: tuple[float, float], end: date) -> str:
 
 
 def download_cell(cell: tuple[float, float], end: date) -> None:
-    """İndir → doğrula → kaydet (önce .part, sonra yeniden adlandır: yarım dosya önbelleğe girmez)."""
+    """Download → validate → save (first .part, then rename: a partial file never enters the cache)."""
     text = fetch(cell, end)
-    parse_power_csv(text, cell)  # geçersiz yanıt diske yazılmaz
+    parse_power_csv(text, cell)  # an invalid response is not written to disk
     path = raw_path(cell)
     tmp = path.with_suffix(".part")
     tmp.write_text(text, encoding="utf-8")
@@ -177,7 +177,7 @@ def download_missing(cells: list[tuple[float, float]], end: date) -> None:
         for i, fut in enumerate(as_completed(futs), 1):
             try:
                 fut.result()
-            except Exception as e:  # noqa: BLE001 — hepsi toplanır, sonunda hata verilir
+            except Exception as e:  # noqa: BLE001 — all are collected, error raised at the end
                 errors.append(f"{futs[fut]}: {type(e).__name__}: {e}")
             if i % 25 == 0 or i == len(todo):
                 print(f"  {i}/{len(todo)} ({time.time() - t0:.0f} sn, {len(errors)} hata)")
@@ -186,7 +186,7 @@ def download_missing(cells: list[tuple[float, float]], end: date) -> None:
                            + "\n  ".join(errors[:10]))
 
 
-# ---------------------------------------------------------------- tablo
+# ---------------------------------------------------------------- table
 def build_table(cells: list[tuple[float, float]]) -> tuple[pd.DataFrame, int]:
     parts, n_partial = [], 0
     for c in cells:

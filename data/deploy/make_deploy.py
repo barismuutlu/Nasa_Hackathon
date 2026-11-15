@@ -1,13 +1,13 @@
-"""Streamlit Cloud için küçültülmüş veri üretir — sahibi P4 Barış.
+"""Produces reduced data for Streamlit Cloud — owner P4 Barış.
 
-Cloud'da data/hotspots*.parquet yok (git'e girmez, ~160 MB, bellek sınırı ~1 GB).
-Bu script tam veriden sadece uygulamanın hazır bölgelerini (query.PRESETS) alır:
-    data/deploy/hotspots_deploy.parquet   (git'e girer, query.py otomatik kullanır)
+Cloud has no data/hotspots*.parquet (not in git, ~160 MB, memory limit ~1 GB).
+This script takes ONLY the app's preset regions (query.PRESETS) from the full data:
+    data/deploy/hotspots_deploy.parquet   (goes into git, query.py uses it automatically)
 
-Kaynak önceliği query.py ile aynı: hotspots_harm.parquet (P2) varsa o, yoksa hotspots.parquet (P1).
-Bahtiyar'ın harmonize verisi gelince bu script'i tekrar çalıştır → push → Cloud kendini günceller.
+Source priority is the same as query.py: hotspots_harm.parquet (P2) if present, otherwise hotspots.parquet (P1).
+When Bahtiyar's harmonized data arrives, rerun this script → push → Cloud updates itself.
 
-Çalıştır (repo kökünden):  python data/deploy/make_deploy.py
+Run (from the repo root):  python data/deploy/make_deploy.py
 """
 import sys
 from pathlib import Path

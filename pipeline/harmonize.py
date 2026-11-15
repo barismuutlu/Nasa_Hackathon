@@ -1,25 +1,25 @@
-"""P2 — Harmonizasyon (sözleşme v1.1, docs/CONTRACT.md §6, §7.2).
+"""P2 — Harmonization (contract v1.1, docs/CONTRACT.md §6, §7.2).
 
-YÖNTEM (Yöntem A, k oranı — doğrulanmamış hipotez; metrikler P3'te):
-1. weight_harm = her tespitin "MODIS-eşdeğeri" katkısı; Σ weight_harm = harmonize tespit tahmini.
-2. MODIS satırı: ilk S-NPP tarihinden önce 1.0, sonra 0.0 (VIIRS döneminde seriyi VIIRS taşır).
-   Aqua öncesi (2000-11 → 2002-07, tek MODIS = Terra): Terra satırı k_terra = Σ(Terra+Aqua)/Σ Terra,
-   argentina 2003–2011, ikisinin de aktif olduğu günler (Aqua öğleden sonra geçer, daha çok yakalar).
-3. VIIRS satırı: k(lat_band, season, satellite) / n_active_viirs(gün).
-   - k = Σ MODIS / Σ VIIRS_uydu; eğitim: region="argentina", 2012–2021, sadece Terra + Aqua +
-     o VIIRS uydusunun AYNI GÜN aktif olduğu günler. 2022–2024 test → eğitime girmez.
-   - lat_band = |enlem| 10° dilim; season = yerel mevsim (güney yarımkürede ay +6).
-   - n_MODIS < MIN_N_MODIS → o mevsim+uydu için bantlar birleştirilir (fallback). Eğitimde olmayan
-     bant → en yakın bant (fallback). NOAA21 eğitim döneminde yok → NOAA20'nin k'sı (fallback).
-4. n_active_viirs: satellite_coverage.csv ilk–son tarih aralığı, eksi veri kesintileri
-   (eğitim bölgesinde ≥ MIN_OUTAGE_DAYS ardışık gün hiç tespit yok; ör. SNPP 2022-07-27…08-10).
-   Böylece yeni uydu eklenince/düşünce harmonize seride sıçrama olmaz.
-5. Filtre yok: type=2 (statik kaynak, AR'de ~%3–5) dahil. NRT'de type boş → filtre 2026-08 sonrasına
-   uygulanamaz ve seri kırılırdı; MODIS ve VIIRS'e aynı kural (hiç filtre) uygulanır.
+METHOD (Method A, k ratio — unvalidated hypothesis; metrics in P3):
+1. weight_harm = each detection's "MODIS-equivalent" contribution; Σ weight_harm = harmonized detection estimate.
+2. MODIS row: 1.0 before the first S-NPP date, 0.0 after (in the VIIRS era, VIIRS carries the series).
+   Pre-Aqua (2000-11 → 2002-07, the only MODIS = Terra): Terra row k_terra = Σ(Terra+Aqua)/Σ Terra,
+   argentina 2003–2011, days when both are active (Aqua passes in the afternoon, catches more).
+3. VIIRS row: k(lat_band, season, satellite) / n_active_viirs(day).
+   - k = Σ MODIS / Σ VIIRS_sat; training: region="argentina", 2012–2021, only days when Terra + Aqua +
+     that VIIRS satellite are active on the SAME DAY. 2022–2024 test → not used in training.
+   - lat_band = |latitude| 10° slice; season = local season (in the southern hemisphere month +6).
+   - n_MODIS < MIN_N_MODIS → bands are pooled for that season+satellite (fallback). Band absent
+     from training → nearest band (fallback). NOAA21 absent in training period → NOAA20's k (fallback).
+4. n_active_viirs: satellite_coverage.csv first–last date range, minus data outages
+   (≥ MIN_OUTAGE_DAYS consecutive days with no detection in the training region; e.g. SNPP 2022-07-27…08-10).
+   This way the harmonized series does not jump when a new satellite is added/dropped.
+5. No filter: type=2 (static source, ~3–5% in AR) included. In NRT type is empty → a filter could not be
+   applied after 2026-08 and the series would break; the same rule (no filter) applies to MODIS and VIIRS.
 
-Girdi : data/hotspots.parquet, data/satellite_coverage.csv  (P1; test için $HARM_INPUT_DIR)
-Çıktı : data/hotspots_harm.parquet, data/monthly_grid.parquet, data/k_factors.csv ($HARM_OUT_DIR)
-Çalıştırma (repo kökünden):  python pipeline/harmonize.py
+Input : data/hotspots.parquet, data/satellite_coverage.csv  (P1; for testing $HARM_INPUT_DIR)
+Output: data/hotspots_harm.parquet, data/monthly_grid.parquet, data/k_factors.csv ($HARM_OUT_DIR)
+Run (from repo root):  python pipeline/harmonize.py
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from contract import COLUMNS, validate_hotspots  # noqa: E402
 
-# ---- Yol sabitleri ---------------------------------------------------------
+# ---- Path constants -------------------------------------------------------
 IN_DIR = Path(os.environ.get("HARM_INPUT_DIR", "data"))
 OUT_DIR = Path(os.environ.get("HARM_OUT_DIR", "data"))
 INPUT_PATH = IN_DIR / "hotspots.parquet"
@@ -42,24 +42,24 @@ OUT_HOTSPOTS = OUT_DIR / "hotspots_harm.parquet"
 OUT_GRID = OUT_DIR / "monthly_grid.parquet"
 OUT_K = OUT_DIR / "k_factors.csv"
 
-# ---- Parametreler ----------------------------------------------------------
+# ---- Parameters ------------------------------------------------------------
 TRAIN_REGION = "argentina"
-TRAIN_YEARS = (2012, 2021)          # dahil; 2022–2024 test → eğitime GİRMEZ (sızıntı)
-MIN_N_MODIS = 500                   # altı → bantlar birleştirilir. 30'da 50-60 bandı (Almanya/Belçika)
-                                    # Tierra del Fuego'nun ~50 tespitinden k≈0.08 alıyordu.
-MIN_OUTAGE_DAYS = 3                 # eğitim bölgesinde bu kadar ardışık gün tespit yok → kesinti
-TERRA_TRAIN_YEARS = (2003, 2011)    # Terra-only ağırlığı: Terra+Aqua ikisi de aktif, VIIRS öncesi
+TRAIN_YEARS = (2012, 2021)          # inclusive; 2022–2024 test → NOT used in training (leakage)
+MIN_N_MODIS = 500                   # below → bands are pooled. At 30, the 50-60 band (Germany/Belgium)
+                                    # got k≈0.08 from Tierra del Fuego's ~50 detections.
+MIN_OUTAGE_DAYS = 3                 # this many consecutive days without detections in the training region → outage
+TERRA_TRAIN_YEARS = (2003, 2011)    # Terra-only weight: Terra+Aqua both active, pre-VIIRS
 GRID = 0.25
 
 VIIRS_SATS = ["SNPP", "NOAA20", "NOAA21"]
 MODIS_SATS = ["Terra", "Aqua"]
-SAT_PROXY = {"NOAA21": "NOAA20"}    # eğitimde verisi olmayan uydu → bu uydunun k'sı
+SAT_PROXY = {"NOAA21": "NOAA20"}    # satellite with no training data → this satellite's k
 
 SEASONS = {12: "winter", 1: "winter", 2: "winter", 3: "spring", 4: "spring", 5: "spring",
            6: "summer", 7: "summer", 8: "summer", 9: "autumn", 10: "autumn", 11: "autumn"}
 
 
-# ---- Yükleme ---------------------------------------------------------------
+# ---- Loading ---------------------------------------------------------------
 def load() -> tuple[pd.DataFrame, pd.DataFrame]:
     for p in (INPUT_PATH, COVERAGE_PATH):
         if not p.exists():
@@ -73,7 +73,7 @@ def load() -> tuple[pd.DataFrame, pd.DataFrame]:
     return df, cov
 
 
-# ---- Yardımcılar -----------------------------------------------------------
+# ---- Helpers ---------------------------------------------------------------
 def lat_band(lat: pd.Series) -> pd.Series:
     lo = (np.floor(lat.abs() / 10) * 10).astype(int)
     return lo.astype(str) + "-" + (lo + 10).astype(str)
@@ -81,7 +81,7 @@ def lat_band(lat: pd.Series) -> pd.Series:
 
 def local_season(lat: pd.Series, month: pd.Series) -> pd.Series:
     m = month.astype(int)
-    m_local = np.where(lat < 0, (m - 1 + 6) % 12 + 1, m)   # güney yarımküre: +6 ay
+    m_local = np.where(lat < 0, (m - 1 + 6) % 12 + 1, m)   # southern hemisphere: +6 months
     return pd.Series(m_local, index=lat.index).map(SEASONS)
 
 
@@ -90,9 +90,9 @@ def band_lo(band: str) -> int:
 
 
 def active_days(df: pd.DataFrame, cov: pd.DataFrame) -> pd.DataFrame:
-    """Gün × uydu aktiflik tablosu (bool): coverage ilk–son aralığı, eksi kesintiler."""
-    # Uydu çalışma tarihleri sadece eğitim bölgesinden: küçük bölgelerin (aachen_eifel) ilk/son
-    # tarihi seyrek tespit tarihidir, uydu çalışma tarihi değil (P1 notu).
+    """Day × satellite activity table (bool): coverage first–last range, minus outages."""
+    # Satellite operating dates only from the training region: the first/last date of small regions
+    # (aachen_eifel) is a sparse detection date, not a satellite operating date (P1 note).
     if "region" in cov.columns:
         cov = cov[cov["region"] == TRAIN_REGION]
         if cov.empty:
@@ -106,7 +106,7 @@ def active_days(df: pd.DataFrame, cov: pd.DataFrame) -> pd.DataFrame:
             continue
         on = (days >= span.loc[sat, "first"]) & (days <= span.loc[sat, "last"])
         d = ref.loc[ref["satellite"] == sat, "acq_date"].unique()
-        if len(d):   # kesinti tespiti sadece büyük eğitim bölgesinde güvenilir
+        if len(d):   # outage detection is reliable only in the large training region
             has = pd.Series(days.isin(d), index=days)
             run_len = has.groupby((has != has.shift()).cumsum()).transform("size")
             on &= ~((~has) & (run_len >= MIN_OUTAGE_DAYS)).to_numpy()
@@ -114,7 +114,7 @@ def active_days(df: pd.DataFrame, cov: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-# ---- k katsayıları ----------------------------------------------------------
+# ---- k coefficients --------------------------------------------------------
 def compute_k(df: pd.DataFrame, act: pd.DataFrame) -> pd.DataFrame:
     tr = df.loc[(df["region"] == TRAIN_REGION) & df["year"].between(*TRAIN_YEARS),
                 ["acq_date", "satellite", "instrument", "_band", "_season"]]
@@ -140,7 +140,7 @@ def compute_k(df: pd.DataFrame, act: pd.DataFrame) -> pd.DataFrame:
 
 
 def complete_k(k: pd.DataFrame, needed: pd.DataFrame) -> pd.DataFrame:
-    """Uygulamada gereken her (band, season, satellite) için bir k olsun (proxy uydu / en yakın bant)."""
+    """Ensure a k exists for every (band, season, satellite) needed in application (proxy satellite / nearest band)."""
     k = k.copy()
     for sat, proxy in SAT_PROXY.items():
         if sat not in set(k["satellite"]):
@@ -164,7 +164,7 @@ def complete_k(k: pd.DataFrame, needed: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_k_terra(df: pd.DataFrame, act: pd.DataFrame) -> dict:
-    """Tek-Terra dönemi için ağırlık: Σ(Terra+Aqua) / Σ Terra (eğitim bölgesi, 2003–2011)."""
+    """Weight for the Terra-only period: Σ(Terra+Aqua) / Σ Terra (training region, 2003–2011)."""
     both = act.index[act["Terra"] & act["Aqua"]]
     m = df.loc[(df["region"] == TRAIN_REGION) & df["year"].between(*TERRA_TRAIN_YEARS)
                & (df["instrument"] == "MODIS") & df["acq_date"].isin(both), "satellite"].astype(str)
@@ -194,7 +194,7 @@ def compute_weights(df: pd.DataFrame, k: pd.DataFrame, act: pd.DataFrame, k_terr
         kk = k.set_index(["lat_band", "season", "satellite"])["k"]
         k_vals = kk.reindex(pd.MultiIndex.from_frame(v[["_band", "_season", "satellite"]])).to_numpy()
         n_act = act[VIIRS_SATS].sum(axis=1).reindex(v["acq_date"]).fillna(0).to_numpy()
-        w[is_v] = k_vals / np.maximum(n_act, 1)   # tespiti olan uydu o gün en az 1 aktif sayılır
+        w[is_v] = k_vals / np.maximum(n_act, 1)   # a satellite with a detection counts as at least 1 active that day
 
     if w.isna().any():
         raise ValueError(f"weight_harm'da {int(w.isna().sum())} NaN kaldı")
@@ -203,7 +203,7 @@ def compute_weights(df: pd.DataFrame, k: pd.DataFrame, act: pd.DataFrame, k_terr
     return w.astype("float32")
 
 
-# ---- Aylık grid (CONTRACT §7.2) --------------------------------------------
+# ---- Monthly grid (CONTRACT §7.2) ------------------------------------------
 def monthly_grid(df: pd.DataFrame) -> pd.DataFrame:
     sat = df["satellite"].astype(str)
     g = pd.DataFrame({
@@ -224,7 +224,7 @@ def monthly_grid(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-# ---- Özet -------------------------------------------------------------------
+# ---- Summary ----------------------------------------------------------------
 def summary(df: pd.DataFrame) -> None:
     ar = df[df["region"] == TRAIN_REGION]
     if ar.empty:

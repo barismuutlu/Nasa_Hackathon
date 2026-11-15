@@ -1,5 +1,5 @@
-# Değişiklik → P4 (Barış). Python 3.12 (bkz. .python-version, CLAUDE.md §4).
-# Sürümler SABİT: herkes aynı paketleri kullanır. Yeni paket gerekiyorsa Barış'a söyle.
+# Change → P4 (Barış). Python 3.12 (see .python-version, CLAUDE.md §4).
+# Versions are PINNED: everyone uses the same packages. If a new package is needed, tell Barış.
 pandas==3.1.1
 pyarrow==26.0.1
 numpy==2.5.4

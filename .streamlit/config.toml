@@ -1,6 +1,6 @@
 [theme]
 base = "dark"
-# sıcak koyu gri zemin + yanık turuncu vurgu (uydu altlığı ve alev paletiyle uyumlu)
+# warm dark grey background + burnt orange accent (matches the satellite basemap and flame palette)
 primaryColor = "#d9742b"
 backgroundColor = "#1d1c1a"
 secondaryBackgroundColor = "#272522"
@@ -15,5 +15,5 @@ metricValueFontWeight = 650
 paddingTop = "2.5rem"
 
 [client]
-# sağ üstteki geliştirici menüsünü (Deploy, ⋮) gizle — jüri/kullanıcı için sade görünüm
+# hide the developer menu at the top right (Deploy, ⋮) — clean look for the jury/users
 toolbarMode = "viewer"

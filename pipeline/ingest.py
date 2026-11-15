@@ -1,25 +1,25 @@
-"""FIRMS CSV'lerini sözleşme şemasına çevirir → data/hotspots.parquet — sahibi P1 Süleyman.
+"""Converts FIRMS CSVs to the contract schema → data/hotspots.parquet — owner P1 Süleyman.
 
-Şema ve kurallar: docs/CONTRACT.md v1.2 (§1 şema, §2 eksik değer, §3 biçimler, §4 tekrar, §5 bölge, §7.1).
-Sabitler contract.py'den gelir; burada yeniden tanımlanmaz.
+Schema and rules: docs/CONTRACT.md v1.2 (§1 schema, §2 missing values, §3 formats, §4 duplicates, §5 region, §7.1).
+Constants come from contract.py; they are not redefined here.
 
-Girdi: data/raw/<region>/ altındaki *.csv ve *.zip (zip içindeki alt klasörler dahil).
-       Klasör adı = `region` değeri (contract.REGIONS: argentina, aachen_eifel).
-       Kaynak = takımın Drive'ındaki DL_FIRE verisi (zip'ler açılmadan konabilir).
+Input: *.csv and *.zip under data/raw/<region>/ (including subfolders inside zips).
+       Folder name = `region` value (contract.REGIONS: argentina, aachen_eifel).
+       Source = DL_FIRE data in the team's Drive (zips can be dropped in unextracted).
 
-İki FIRMS biçimi de okunur (CONTRACT §3 tablosu):
-  * DL_FIRE indirme aracı (fire_archive_* / fire_nrt_*): VIIRS'te de `brightness` + `bright_t31`
-  * Ülke-yıl dosyaları (<ürün>_<yıl>_<Ülke>.csv): VIIRS `bright_ti4` + `bright_ti5`
-    → okunur ama UYARI basılır: §5'e göre kullanılmaz (2026 ve NOAA-21 yok)
-  Enstrüman = contract.SATELLITE_INSTRUMENT[satellite]; `confidence` biçimiyle (MODIS 0–100, VIIRS l/n/h)
-  çapraz kontrol edilir.
+Both FIRMS formats are read (CONTRACT §3 table):
+  * DL_FIRE download tool (fire_archive_* / fire_nrt_*): `brightness` + `bright_t31`, VIIRS included
+  * Country-year files (<product>_<year>_<Country>.csv): VIIRS `bright_ti4` + `bright_ti5`
+    → read, but a WARNING is printed: not used per §5 (no 2026 and no NOAA-21)
+  Instrument = contract.SATELLITE_INSTRUMENT[satellite]; cross-checked against the `confidence` format
+  (MODIS 0–100, VIIRS l/n/h).
 
-Çıktılar:
-  data/hotspots.parquet                 tam veri (git'e GİRMEZ)
-  data/satellite_coverage.csv           bölge × uydu × kaynak ilk/son tarih + NRT kesimi (P2 için, git'e GİRMEZ)
-  data/sample/hotspots_sample.parquet   La Rioja 2020 örneği (git'e girer)
+Outputs:
+  data/hotspots.parquet                 full data (NOT committed to git)
+  data/satellite_coverage.csv           region × satellite × source first/last date + NRT cutoff (for P2, NOT committed to git)
+  data/sample/hotspots_sample.parquet   La Rioja 2020 sample (committed to git)
 
-Çalıştır (repo kökünden):  python pipeline/ingest.py
+Run (from repo root):  python pipeline/ingest.py
 """
 from __future__ import annotations
 
@@ -31,14 +31,14 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ---------------------------------------------------------------- yol sabitleri
+# ---------------------------------------------------------------- path constants
 ROOT = Path(__file__).resolve().parents[1]
 RAW_DIR = ROOT / "data" / "raw"
 OUT_PATH = ROOT / "data" / "hotspots.parquet"
 COVERAGE_PATH = ROOT / "data" / "satellite_coverage.csv"
 SAMPLE_DIR = ROOT / "data" / "sample"
 SAMPLE_PATH = SAMPLE_DIR / "hotspots_sample.parquet"
-# data/raw/ altında FIRMS OLMAYAN klasörler (başka script'lerin ham verisi) → bölge sayılmaz, atlanır
+# NON-FIRMS folders under data/raw/ (raw data of other scripts) → not treated as regions, skipped
 NON_FIRMS_DIRS = {"power": "pipeline/weather_power.py (NASA POWER hava verisi)"}
 
 sys.path.insert(0, str(ROOT))
@@ -47,25 +47,25 @@ from contract import (  # noqa: E402
     VIIRS_CONFIDENCE_CLASS, modis_confidence_class, validate_hotspots,
 )
 
-# ---------------------------------------------------------------- örnek & kontrol bölgeleri
-# (lon_min, lat_min, lon_max, lat_max) — app/query.py PRESETS ile aynı
+# ---------------------------------------------------------------- sample & check regions
+# (lon_min, lat_min, lon_max, lat_max) — same as app/query.py PRESETS
 SAMPLE_BBOX = (-69.7, -31.9, -65.4, -27.6)  # La Rioja (AR)
 SAMPLE_YEAR = 2020
 VENN_BBOX = (5.95, 50.45, 6.25, 50.60)      # Hohes Venn
 
-# ---------------------------------------------------------------- ham sütunlar
-# Zorunlu alanlar (CONTRACT §2): okunamayan satır atılır ve sayılır. Başka sebeple satır atılmaz.
+# ---------------------------------------------------------------- raw columns
+# Required fields (CONTRACT §2): unreadable rows are dropped and counted. No row is dropped for any other reason.
 KEY_RAW = ["latitude", "longitude", "acq_date", "acq_time", "satellite"]
 OTHER_RAW = ["confidence", "version", "scan", "track", "frp", "daynight"]
-# parlaklık sütun çifti → (brightness, brightness_2)
+# brightness column pair → (brightness, brightness_2)
 BRIGHT_PAIRS = {"bright_ti4": ("bright_ti4", "bright_ti5"), "brightness": ("brightness", "bright_t31")}
-STR = pd.StringDtype("pyarrow")  # str(STR) == "string"; python nesnesinden çok daha az bellek
+STR = pd.StringDtype("pyarrow")  # str(STR) == "string"; far less memory than python objects
 
 
-# ================================================================ okuma
+# ================================================================ reading
 
 class _ZipMember:
-    """Zip içindeki tek CSV'yi akış olarak açar (tamamını belleğe almadan)."""
+    """Opens a single CSV inside a zip as a stream (without loading it fully into memory)."""
 
     def __init__(self, zip_path: Path, name: str):
         self.zip_path, self.name = zip_path, name
@@ -81,7 +81,7 @@ class _ZipMember:
 
 
 def find_raw_sources() -> list[tuple[str, str, callable]]:
-    """(region, görünen ad, açıcı) listesi. data/raw/<region>/ altındaki CSV ve zip'ler."""
+    """List of (region, display name, opener). CSVs and zips under data/raw/<region>/."""
     if not RAW_DIR.exists():
         raise FileNotFoundError(f"{RAW_DIR} yok. FIRMS dosyalarını data/raw/<region>/ altına koy.")
     sources = []
@@ -114,7 +114,7 @@ def _detect_source(name: str, header: list[str], version: pd.Series) -> str:
         return "archive"
     if re.search(r"(^|[^a-z])nrt([^a-z]|$)", base):
         return "nrt"
-    if "type" in header:  # ülke-yıl dosyaları: archive, `type` sütunu var
+    if "type" in header:  # country-year files: archive, have a `type` column
         print(f"  UYARI: {name}: ülke-yıl dosyası gibi görünüyor — CONTRACT §5'e göre kullanılmaz "
               f"(2026 ve NOAA-21 yok); DL_FIRE verisi kullan")
         return "archive"
@@ -129,7 +129,7 @@ def _bad(name: str, col: str, values) -> ValueError:
 
 
 def read_one(region: str, name: str, opener) -> tuple[pd.DataFrame, int]:
-    """Tek FIRMS CSV'si → (§1 şemasında DataFrame, okunamadığı için atılan satır sayısı)."""
+    """Single FIRMS CSV → (DataFrame in the §1 schema, number of rows dropped as unreadable)."""
     with opener() as f:
         header = [c.strip().lower() for c in pd.read_csv(f, nrows=0).columns]
 
@@ -145,7 +145,7 @@ def read_one(region: str, name: str, opener) -> tuple[pd.DataFrame, int]:
     with opener() as f:
         raw = pd.read_csv(
             f, usecols=lambda c: c.strip().lower() in usecols,
-            # zorunlu alanlar metin olarak okunur → okunamayan değer satır atılarak sayılır (§2)
+            # required fields are read as text → unreadable value: row dropped and counted (§2)
             dtype={**{c: str for c in KEY_RAW}, "confidence": str, "version": str, "daynight": str,
                    "scan": "float32", "track": "float32", "frp": "float32",
                    b1: "float32", b2: "float32", "type": "Int8"},
@@ -153,7 +153,7 @@ def read_one(region: str, name: str, opener) -> tuple[pd.DataFrame, int]:
         )
     raw.columns = [c.strip().lower() for c in raw.columns]
 
-    # --- zorunlu alanlar: okunamayan → at
+    # --- required fields: unreadable → drop
     lat = pd.to_numeric(raw["latitude"], errors="coerce")
     lon = pd.to_numeric(raw["longitude"], errors="coerce")
     acq_date = pd.to_datetime(raw["acq_date"].str.strip(), format="%Y-%m-%d", errors="coerce")
@@ -168,7 +168,7 @@ def read_one(region: str, name: str, opener) -> tuple[pd.DataFrame, int]:
         print(f"  boş    {name} (atılan: {n_bad})")
         return pd.DataFrame(), n_bad
 
-    # --- uydu & enstrüman (bilinmeyen kod → hata, sessiz atma yok)
+    # --- satellite & instrument (unknown code → error, no silent dropping)
     satellite = sat_code.map(SATELLITE_CODES)
     if satellite.isna().any():
         raise _bad(name, "satellite (contract.SATELLITE_CODES'ta yok)", sat_code[satellite.isna()])
@@ -177,7 +177,7 @@ def read_one(region: str, name: str, opener) -> tuple[pd.DataFrame, int]:
     if b1 == "bright_ti4" and is_modis.any():
         raise ValueError(f"{name}: `bright_ti4` (VIIRS) var ama MODIS uydusu satırı da var")
 
-    # --- güven: orijinal değer korunur, sınıf türetilir
+    # --- confidence: original value kept, class derived
     conf = raw["confidence"]
     if conf.isna().any():
         raise ValueError(f"{name}: {int(conf.isna().sum())} satırda `confidence` boş (zorunlu sütun)")
@@ -193,7 +193,7 @@ def read_one(region: str, name: str, opener) -> tuple[pd.DataFrame, int]:
             raise _bad(name, "confidence (VIIRS l/n/h bekleniyor)", conf[~is_modis][mapped.isna()])
         conf_class[~is_modis] = mapped
 
-    # --- diğer alanlar
+    # --- other fields
     version = raw["version"].str.strip()
     if version.isna().any():
         raise ValueError(f"{name}: {int(version.isna().sum())} satırda `version` boş (zorunlu sütun)")
@@ -244,11 +244,11 @@ def read_one(region: str, name: str, opener) -> tuple[pd.DataFrame, int]:
     return df, n_bad
 
 
-# ================================================================ tekrar & çakışma (CONTRACT §4)
+# ================================================================ duplicates & overlap (CONTRACT §4)
 
 def drop_nrt_overlap(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """4b: her (region, satellite) için cutoff = o bölgenin archive'indeki son acq_date;
-    o bölge-uydunun acq_date ≤ cutoff NRT satırları atılır."""
+    """4b: for each (region, satellite), cutoff = last acq_date in that region's archive;
+    that region-satellite's NRT rows with acq_date ≤ cutoff are dropped."""
     keys = ["region", "satellite"]
     is_arch = df["source"] == "archive"
     cutoff = df.loc[is_arch].groupby(keys, observed=True)["acq_date"].max().rename("nrt_cutoff")
@@ -271,8 +271,8 @@ def drop_nrt_overlap(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def check_region_bbox(df: pd.DataFrame) -> None:
-    """contract.REGIONS'ta bbox'ı olan bölgelerde kutu dışı satır → UYARI (yanlış klasör belirtisi).
-    Satır atılmaz (CONTRACT §2)."""
+    """For regions with a bbox in contract.REGIONS: rows outside the box → WARNING (sign of a wrong folder).
+    No rows are dropped (CONTRACT §2)."""
     for reg, bbox in REGIONS.items():
         if bbox is None:
             continue
@@ -284,7 +284,7 @@ def check_region_bbox(df: pd.DataFrame) -> None:
 
 
 def drop_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
-    """4a: anahtar (satellite, datetime_utc, round(lat,4), round(lon,4)) → ilki kalır (archive önce)."""
+    """4a: key (satellite, datetime_utc, round(lat,4), round(lon,4)) → first one is kept (archive first)."""
     key = df[["satellite", "datetime_utc"]].assign(lat4=df["latitude"].round(4), lon4=df["longitude"].round(4))
     order = np.argsort(df["source"].cat.codes.to_numpy(), kind="stable")  # archive < nrt
     dup_sorted = key.iloc[order].duplicated(keep="first").to_numpy()
@@ -295,10 +295,10 @@ def drop_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[~dup]
 
 
-# ================================================================ özet
+# ================================================================ summary
 
 def coverage_table(df: pd.DataFrame, nrt_info: pd.DataFrame) -> pd.DataFrame:
-    """CONTRACT §7.1: her bölge × uydu × kaynak bir satır."""
+    """CONTRACT §7.1: one row per region × satellite × source."""
     g = df.groupby(["region", "satellite", "source"], observed=True)
     cov = pd.DataFrame({
         "first_date": g["acq_date"].min().dt.date,
@@ -351,7 +351,7 @@ def write_sample(df: pd.DataFrame) -> None:
 
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")  # Windows konsolu (cp1252) Türkçe karakterde patlamasın
+        sys.stdout.reconfigure(encoding="utf-8")  # keep the Windows console (cp1252) from crashing on Turkish characters
 
     print(f"Okuma: {RAW_DIR.relative_to(ROOT)}")
     for d, owner in NON_FIRMS_DIRS.items():

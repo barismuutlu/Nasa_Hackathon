@@ -1,14 +1,14 @@
-"""SENTETİK TEST VERİSİ üretir (docs/CONTRACT.md v1.1 şeması) — sahibi P4 Barış.
+"""Generates SYNTHETIC TEST DATA (docs/CONTRACT.md v1.1 schema) — owner P4 Barış.
 
-Amaç: gerçek veri (P1 12:30, P2 16:30) gelene kadar app.py ve query.py geliştirilebilsin.
-Bilimsel değeri YOK. Her satırda version="MOCK". Gerçek veriyi taklit eden özellikler:
-  * Uydu eklendikçe ham sayılar sıçrar (Aqua 2002, S-NPP 2012, NOAA-20 2018, NOAA-21 2023)
-  * weight_harm doğru tanımla dolu (§3.3) → harmonize seride sıçrama yok
-  * Hohes Venn'de Nisan 2011 (sadece MODIS) ve Ağustos 2026 (VIIRS) tespit pikleri
-  * S-NPP 2026-11-02'de biter (gerçekte olduğu gibi)
-  * La Rioja: güney yarımküre yangın sezonu (Ağu–Kas)
+Purpose: let app.py and query.py be developed until the real data arrives (P1 12:30, P2 16:30).
+NO scientific value. Every row has version="MOCK". Features that imitate the real data:
+  * Raw counts jump as satellites are added (Aqua 2002, S-NPP 2012, NOAA-20 2018, NOAA-21 2023)
+  * weight_harm filled with the correct definition (§3.3) → no jumps in the harmonized series
+  * Detection peaks at Hohes Venn in April 2011 (MODIS only) and August 2026 (VIIRS)
+  * S-NPP ends on 2026-11-02 (as in reality)
+  * La Rioja: southern-hemisphere fire season (Aug–Nov)
 
-Çalıştır (repo kökünden):  python data/mock/make_mock.py
+Run (from the repo root):  python data/mock/make_mock.py
 """
 import sys
 from pathlib import Path
@@ -23,9 +23,9 @@ OUT = Path(__file__).resolve().parent / "hotspots_mock.parquet"
 RNG = np.random.default_rng(2026)
 START = pd.Timestamp("2000-11-01")
 END = pd.Timestamp("2026-11-13")
-ARCHIVE_UNTIL = pd.Timestamp("2026-07-01")  # sonrası "nrt"
+ARCHIVE_UNTIL = pd.Timestamp("2026-07-01")  # after this: "nrt"
 
-# uydu: (enstrüman, ilk tarih, son tarih, MODIS-eşdeğerine göre hassasiyet, yerel geçiş saatleri gündüz/gece)
+# satellite: (instrument, first date, last date, sensitivity relative to MODIS-equivalent, local overpass times day/night)
 SATS = {
     "Terra": ("MODIS", "2000-11-01", None, 0.5, (10.5, 22.5)),
     "Aqua": ("MODIS", "2002-07-04", None, 0.5, (13.5, 1.5)),
@@ -34,10 +34,10 @@ SATS = {
     "NOAA21": ("VIIRS", "2023-03-01", None, 3.0, (13.1, 1.1)),
 }
 VIIRS_START = pd.Timestamp(SATS["SNPP"][1])
-K_MOCK = 1 / 3.0  # MODIS / VIIRS (tek uydu) — gerçek değeri P2 hesaplayacak
+K_MOCK = 1 / 3.0  # MODIS / VIIRS (single satellite) — P2 will compute the real value
 
-# üretim kutusu: bbox (lon_min, lat_min, lon_max, lat_max), aylık taban (MODIS-eşdeğeri), mevsim çarpanları Oca..Ara
-# anahtar = region değeri (contract.REGIONS). "argentina" gerçekte tüm ülke; sentetikte sadece La Rioja kutusu.
+# generation box: bbox (lon_min, lat_min, lon_max, lat_max), monthly base (MODIS-equivalent), seasonal factors Jan..Dec
+# key = region value (contract.REGIONS). "argentina" is the whole country in reality; in the synthetic data only the La Rioja box.
 REGIONS = {
     "argentina": ((-69.7, -31.9, -65.4, -27.6), 40.0,
                   [1.0, 0.8, 0.6, 0.4, 0.3, 0.4, 0.8, 1.6, 2.4, 2.6, 2.0, 1.4]),
@@ -45,10 +45,10 @@ REGIONS = {
                      [0.3, 0.4, 1.2, 1.5, 0.8, 0.6, 0.9, 1.0, 0.6, 0.3, 0.2, 0.2]),
 }
 
-# sentetik tespit kümeleri: (region, merkez lon, lat, başlangıç, bitiş, toplam MODIS-eşdeğeri tespit)
+# synthetic detection clusters: (region, center lon, lat, start, end, total MODIS-equivalent detections)
 EVENTS = [
-    ("aachen_eifel", 6.08, 50.52, "2011-04-24", "2011-04-28", 120.0),  # Hohes Venn, Nisan 2011
-    ("aachen_eifel", 6.10, 50.50, "2026-08-10", "2026-08-15", 90.0),   # Hohes Venn, Ağustos 2026
+    ("aachen_eifel", 6.08, 50.52, "2011-04-24", "2011-04-28", 120.0),  # Hohes Venn, April 2011
+    ("aachen_eifel", 6.10, 50.50, "2026-08-10", "2026-08-15", 90.0),   # Hohes Venn, August 2026
 ]
 
 
@@ -61,7 +61,7 @@ def sat_end(sat: str) -> pd.Timestamp:
 
 
 def sample_points(n, bbox, centers, spread):
-    """n noktayı merkezler etrafında dağıt, bbox içine kırp."""
+    """Scatter n points around the centers, clipped to the bbox."""
     lon_min, lat_min, lon_max, lat_max = bbox
     idx = RNG.integers(0, len(centers), n)
     c = np.asarray(centers)[idx]
@@ -71,7 +71,7 @@ def sample_points(n, bbox, centers, spread):
 
 
 def emit(rows, region, sat, n, days, lon, lat):
-    """Bir uydu için n tespiti satır olarak ekle (henüz sütun bazlı)."""
+    """Append n detections for one satellite as rows (still column-based)."""
     if n == 0:
         return
     rows.append(pd.DataFrame({
@@ -122,7 +122,7 @@ def add_attributes(df: pd.DataFrame) -> pd.DataFrame:
     df["instrument"] = df["satellite"].map({s: v[0] for s, v in SATS.items()})
     is_modis = (df["instrument"] == "MODIS").to_numpy()
 
-    # geçiş saati: %80 gündüz; UTC = yerel - lon/15
+    # overpass time: 80% daytime; UTC = local - lon/15
     day = RNG.random(n) < 0.8
     local = np.array([SATS[s][4][0] if d else SATS[s][4][1] for s, d in zip(df["satellite"], day)])
     utc = (local - df["longitude"].to_numpy() / 15.0 + RNG.normal(0, 0.3, n)) % 24
@@ -132,15 +132,15 @@ def add_attributes(df: pd.DataFrame) -> pd.DataFrame:
                           + pd.to_timedelta(t // 100, "h") + pd.to_timedelta(t % 100, "min"))
     df["daynight"] = np.where(day, "D", "N")
 
-    # güven
+    # confidence
     modis_conf = np.clip(RNG.beta(5, 2, n) * 100, 0, 100).astype(int)
     viirs_conf = RNG.choice(["l", "n", "h"], n, p=[0.1, 0.75, 0.15])
-    df["confidence"] = np.where(is_modis, modis_conf.astype(str), viirs_conf)   # orijinal değer
+    df["confidence"] = np.where(is_modis, modis_conf.astype(str), viirs_conf)   # original value
     modis_cat = np.where(modis_conf < 30, "low", np.where(modis_conf < 80, "nominal", "high"))
     viirs_cat = pd.Series(viirs_conf).map({"l": "low", "n": "nominal", "h": "high"}).to_numpy()
     df["confidence_class"] = np.where(is_modis, modis_cat, viirs_cat)
 
-    # fiziksel değerler
+    # physical values
     df["frp"] = np.where(is_modis, RNG.lognormal(2.5, 1.0, n), RNG.lognormal(1.5, 1.0, n))
     df["brightness"] = np.where(is_modis, np.clip(310 + RNG.exponential(15, n), 300, 500),
                                 np.clip(300 + RNG.exponential(15, n), 295, 367))
@@ -149,7 +149,7 @@ def add_attributes(df: pd.DataFrame) -> pd.DataFrame:
     df["scan"] = scan
     df["track"] = scan * RNG.uniform(0.6, 1.0, n)
 
-    # kaynak
+    # source
     archive = df["acq_date"] < ARCHIVE_UNTIL
     df["source"] = np.where(archive, "archive", "nrt")
     df["type"] = pd.array(np.where(archive, 0, pd.NA), dtype="Int8")

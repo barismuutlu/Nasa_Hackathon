@@ -1,5 +1,5 @@
-# SADECE pipeline/burned_area_check.py (P1) için — ana uygulama ve Streamlit Cloud bunu KURMAZ.
-# Kurulum (ana ortamın üstüne):  uv pip install -r requirements-enrich.txt   (ya da pip install -r …)
-# pyhdf: HDF4 okuma (MCD64A1). Hazır paket Linux + Windows için var; macOS Apple Silicon'da yok.
-# Değişiklik → P4 (Barış).
+# ONLY for pipeline/burned_area_check.py (P1) — the main app and Streamlit Cloud do NOT install this.
+# Installation (on top of the main environment):  uv pip install -r requirements-enrich.txt   (or pip install -r …)
+# pyhdf: HDF4 reading (MCD64A1). Prebuilt package exists for Linux + Windows; not on macOS Apple Silicon.
+# Change → P4 (Barış).
 pyhdf==0.11.7

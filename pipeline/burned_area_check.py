@@ -1,48 +1,49 @@
-"""MCD64A1 yanmış alan kontrolü — DESTEKLEYİCİ kanıt — sahibi P1 Süleyman (P4 onayı, 2026-11-14).
+"""MCD64A1 burned area check — SUPPORTING evidence — owner P1 Süleyman (approved by P4, 2026-11-14).
 
-Soru: Hohes Venn tespitleri (Nisan 2011, Ağustos 2026), MCD64A1 C6.1'in (aylık yanmış alan, ~500 m)
-aynı dönemde yanmış olarak işaretlediği piksellere düşüyor mu?
+Question: do the Hohes Venn detections (April 2011, August 2026) fall on pixels that MCD64A1 C6.1
+(monthly burned area, ~500 m) flags as burned in the same period?
 
-UYARI: MCD64A1 bağımsız "gerçek" değildir — algoritması MODIS aktif yangın verisini de kullanır ve
-küçük/kısa yanıkları kaçırabilir. Sonuç "destekleyici kanıt" olarak sunulur (CONTRACT §8).
-Ana şemaya ve CONTRACT'a dokunmaz; çıktı ayrı dosyadır.
+WARNING: MCD64A1 is not independent "ground truth" — its algorithm also uses MODIS active fire data and
+can miss small/short-lived burns. The result is presented as "supporting evidence" (CONTRACT §8).
+Does not touch the main schema or the CONTRACT; the output is a separate file.
 
-Ortam: ana requirements.txt + requirements-enrich.txt (pyhdf, SADECE bu dosya kullanır; içeride import edilir).
+Environment: main requirements.txt + requirements-enrich.txt (pyhdf, used ONLY by this file; imported inside).
 
-Girdi:
+Input:
   data/hotspots.parquet                 (P1 ingest)
-  MCD64A1 C6.1 HDF4 dosyaları           İbrahim'in indirdiği zip (Avrupa karoları h18v03/h18v04).
-    İlk çalıştırmada --zip ile ver: sadece gereken ay/karo dosyaları data/external/mcd64a1/ altına
-    çıkarılır (2,2 GB'ın tamamı kopyalanmaz). Sonraki çalıştırmalarda --zip gerekmez.
-Çıktı:
-  data/burned_area_check.csv            tespit başına bir satır (git'e GİRMEZ) → P3 Oğuzhan
+  MCD64A1 C6.1 HDF4 files               zip downloaded by İbrahim (European tiles h18v03/h18v04).
+    Pass it with --zip on the first run: only the needed month/tile files are extracted to
+    data/external/mcd64a1/ (the full 2.2 GB is not copied). Later runs do not need --zip.
+Output:
+  data/burned_area_check.csv            one row per detection (NOT committed to git) → P3 Oğuzhan
 
-Çalıştır (repo kökünden):
+Run (from repo root):
   pip install -r requirements-enrich.txt
   python pipeline/burned_area_check.py --zip "<…>/MCD64A1_061-20261114_105345-001.zip"
-  python pipeline/burned_area_check.py            # dosyalar çıkarıldıktan sonra
+  python pipeline/burned_area_check.py            # after the files have been extracted
 
-Seçilen tespitler (grup): venn_2011 / venn_2026 = Hohes Venn kutusu (query.PRESETS), 2011-04 / 2026-08,
-tümü (örnekleme yok).
+Selected detections (group): venn_2011 / venn_2026 = Hohes Venn box (query.PRESETS), 2011-04 / 2026-08,
+all of them (no sampling).
 
-Eşleştirme (ayarlanabilir: --tol-days, --ring):
-  * Uzamsal: tespitin düştüğü MCD64A1 pikseli + `ring` komşuluk (ring=1 → 3×3 ≈ 1,4 km;
-    MODIS aktif yangın pikseli nadirde ~1 km, kenarda daha büyük; VIIRS 375 m).
-  * Zamansal: |yanma tarihi − acq_date| ≤ tol_days (16). acq_date ± tol_days'in değdiği tüm aylık
-    granüllere bakılır (ay/yıl sınırı dahil). Burn Date = granül yılının gün numarası (artık yıl %Y%j).
-  * Burn Date (HDF öznitelikleri): valid_range 0–366, 0 = yanmamış, _FillValue -1 = haritalanmamış,
-    water -2. Başka değer = geçersiz.
-  * QA (HDF "QA Legend"): bit0 kara(1)/su(0), bit1 geçerli veri, bit2 kısaltılmış haritalama dönemi,
-    bit3 yeniden etiketlenmiş, bit5–7 özel kod (yanmamış hücreler için; 5 = kalıcı sıcak nokta).
-  * Hizalama testi: her HDF'nin StructMetadata köşe koordinatları (UpperLeftPointMtrs) hesaplanan
-    karo köşesiyle, CoreMetadata başlangıç tarihi granül ayıyla aynı olmalı; değilse ValueError.
+Matching (tunable: --tol-days, --ring):
+  * Spatial: the MCD64A1 pixel the detection falls in + `ring` neighbourhood (ring=1 → 3×3 ≈ 1.4 km;
+    MODIS active fire pixel is ~1 km at nadir, larger at the edge; VIIRS 375 m).
+  * Temporal: |burn date − acq_date| ≤ tol_days (16). All monthly granules touched by
+    acq_date ± tol_days are checked (including month/year boundaries). Burn Date = day of year of the
+    granule year (leap year %Y%j).
+  * Burn Date (HDF attributes): valid_range 0–366, 0 = unburned, _FillValue -1 = unmapped,
+    water -2. Any other value = invalid.
+  * QA (HDF "QA Legend"): bit0 land(1)/water(0), bit1 valid data, bit2 shortened mapping period,
+    bit3 relabeled, bit5–7 special code (for unburned cells; 5 = persistent hot spot).
+  * Alignment test: each HDF's StructMetadata corner coordinates (UpperLeftPointMtrs) must equal the
+    computed tile corner, and the CoreMetadata start date must equal the granule month; otherwise ValueError.
 
-Durum (status) — "bilinmiyor" ile "yanmamış" ayrı tutulur:
-  burned_match       pencerede ±tol_days içinde yanma var                          → matched = True
-  unknown            eşleşme yok VE beklenen kayıtlardan biri eksik / -1 / geçersiz → matched = <NA>
-  burned_other_time  pencerede yanma var ama ±tol_days dışında, tüm kayıtlar geçerli → matched = False
-  unburned           tüm beklenen kayıtlar geçerli ve yanmamış (0) ya da su (-2)   → matched = False
-  no_data            gereken granüllerin hiçbiri yok                               → matched = <NA>
+Status — "unknown" is kept separate from "unburned":
+  burned_match       burn within ±tol_days in the window                              → matched = True
+  unknown            no match AND one of the expected records is missing / -1 / invalid → matched = <NA>
+  burned_other_time  burn in the window but outside ±tol_days, all records valid     → matched = False
+  unburned           all expected records valid and unburned (0) or water (-2)        → matched = False
+  no_data            none of the required granules is available                       → matched = <NA>
 """
 from __future__ import annotations
 
@@ -57,21 +58,21 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-# ---------------------------------------------------------------- yol sabitleri
+# ---------------------------------------------------------------- path constants
 ROOT = Path(__file__).resolve().parents[1]
 HOTSPOTS_PATH = ROOT / "data" / "hotspots.parquet"
 MCD64_DIR = ROOT / "data" / "external" / "mcd64a1"
 OUT_PATH = ROOT / "data" / "burned_area_check.csv"
 
-# ---------------------------------------------------------------- MODIS sinüzoidal ızgara (HDF StructMetadata)
+# ---------------------------------------------------------------- MODIS sinusoidal grid (HDF StructMetadata)
 SPHERE_R = 6371007.181          # ProjParams[0]
-TILE_M = 1111950.5196666666     # karo kenarı (m) = 2·π·R / 36
-NPIX = 2400                     # 500 m ürün: karo başına 2400×2400
+TILE_M = 1111950.5196666666     # tile edge (m) = 2·π·R / 36
+NPIX = 2400                     # 500 m product: 2400×2400 per tile
 PIX_M = TILE_M / NPIX           # ≈ 463.31 m
 SDS = {"burn": "Burn Date", "unc": "Burn Date Uncertainty", "qa": "QA",
        "first_day": "First Day", "last_day": "Last Day"}
 
-# ---------------------------------------------------------------- seçim & eşleştirme ayarları
+# ---------------------------------------------------------------- selection & matching settings
 TOL_DAYS = 16
 RING = 1
 VENN_BBOX = (5.95, 50.45, 6.25, 50.60)          # (lon_min, lat_min, lon_max, lat_max) = query.PRESETS
@@ -85,10 +86,10 @@ OUT_COLUMNS = [
 ]
 
 
-# ================================================================ ızgara
+# ================================================================ grid
 
 def to_pixel(lat, lon) -> tuple[np.ndarray, np.ndarray]:
-    """Enlem/boylam → global (satır, sütun) MCD64A1 500 m pikseli (karo = indeks // 2400)."""
+    """Latitude/longitude → global (row, column) MCD64A1 500 m pixel (tile = index // 2400)."""
     phi, lam = np.radians(np.asarray(lat, float)), np.radians(np.asarray(lon, float))
     x, y = SPHERE_R * lam * np.cos(phi), SPHERE_R * phi
     gcol = np.floor((x + 18 * TILE_M) / PIX_M).astype("int64")
@@ -97,7 +98,7 @@ def to_pixel(lat, lon) -> tuple[np.ndarray, np.ndarray]:
 
 
 def pixel_center(grow, gcol) -> tuple[np.ndarray, np.ndarray]:
-    """Global (satır, sütun) → piksel merkezinin enlem/boylamı."""
+    """Global (row, column) → latitude/longitude of the pixel center."""
     y = 9 * TILE_M - (np.asarray(grow) + 0.5) * PIX_M
     x = -18 * TILE_M + (np.asarray(gcol) + 0.5) * PIX_M
     phi = y / SPHERE_R
@@ -123,7 +124,7 @@ def candidate_months(det: pd.DataFrame, tol_days: int) -> pd.DataFrame:
                         columns=["det_id", "period"])
 
 
-# ================================================================ tespit seçimi
+# ================================================================ detection selection
 
 def select_detections(df: pd.DataFrame) -> pd.DataFrame:
     lon0, lat0, lon1, lat1 = VENN_BBOX
@@ -138,7 +139,7 @@ def select_detections(df: pd.DataFrame) -> pd.DataFrame:
     return det[cols].astype({"satellite": str, "instrument": str, "region": str})
 
 
-# ================================================================ HDF okuma
+# ================================================================ HDF reading
 
 def granule_name(h: int, v: int, period: pd.Period) -> str:
     doy = date(period.year, period.month, 1).timetuple().tm_yday
@@ -146,7 +147,7 @@ def granule_name(h: int, v: int, period: pd.Period) -> str:
 
 
 def ensure_granules(needed: pd.DataFrame, zip_path: Path | None) -> dict[tuple, Path]:
-    """needed: (h, v, period). Eksik HDF'leri zip'ten çıkarır (sadece gerekenler). → {(h,v,period): yol}"""
+    """needed: (h, v, period). Extracts missing HDFs from the zip (only the needed ones). → {(h,v,period): path}"""
     MCD64_DIR.mkdir(parents=True, exist_ok=True)
     found: dict[tuple, Path] = {}
     members: list[str] = []
@@ -174,7 +175,7 @@ def ensure_granules(needed: pd.DataFrame, zip_path: Path | None) -> dict[tuple, 
 
 
 def check_alignment(struct_meta: str, core_meta: str, h: int, v: int, period: pd.Period, name: str) -> None:
-    """Hizalama testi: HDF köşe koordinatı ve tarih, hesaplanan karo/ay ile aynı olmalı."""
+    """Alignment test: HDF corner coordinate and date must match the computed tile/month."""
     ul = re.search(r"UpperLeftPointMtrs=\(([^)]+)\)", struct_meta)
     xdim = re.search(r"XDim=(\d+)", struct_meta)
     ydim = re.search(r"YDim=(\d+)", struct_meta)
@@ -191,8 +192,8 @@ def check_alignment(struct_meta: str, core_meta: str, h: int, v: int, period: pd
 
 
 def _open_sd(path: Path):
-    """HDF4'ü aç. HDF4 C kütüphanesi Windows'ta ASCII olmayan yolları (ör. 'Рабочий стол') açamıyor →
-    geçici olarak dosyanın klasörüne geçip ASCII dosya adıyla açılır (OS göreli yolu Unicode çözer)."""
+    """Open an HDF4 file. The HDF4 C library cannot open non-ASCII paths on Windows (e.g. 'Рабочий стол') →
+    temporarily change into the file's folder and open it by its ASCII file name (the OS resolves the relative path as Unicode)."""
     from pyhdf.SD import SD, SDC
     if str(path).isascii():
         return SD(str(path), SDC.READ)
@@ -205,9 +206,9 @@ def _open_sd(path: Path):
 
 
 def read_records(px: pd.DataFrame, months: pd.DataFrame, zip_path: Path | None) -> pd.DataFrame:
-    """Gereken (piksel, ay) kayıtlarını HDF'lerden okur → (grow, gcol, period, burn, unc, qa, first_day, last_day)."""
+    """Reads the needed (pixel, month) records from the HDFs → (grow, gcol, period, burn, unc, qa, first_day, last_day)."""
     try:
-        import pyhdf.SD  # noqa: F401 — sadece bu script; ana ortamda yok
+        import pyhdf.SD  # noqa: F401 — this script only; not in the main environment
     except ImportError as e:
         raise ImportError("pyhdf yok → pip install -r requirements-enrich.txt (sadece bu script için)") from e
 
@@ -239,10 +240,10 @@ def read_records(px: pd.DataFrame, months: pd.DataFrame, zip_path: Path | None) 
     return pd.concat(rows, ignore_index=True)
 
 
-# ================================================================ değerlendirme
+# ================================================================ evaluation
 
 def evaluate(det: pd.DataFrame, rec: pd.DataFrame, tol_days: int = TOL_DAYS, ring: int = RING) -> pd.DataFrame:
-    """Her tespit için durum (bkz. modül açıklaması). Tespit satır sayısı korunur."""
+    """Status for each detection (see module docstring). The number of detection rows is preserved."""
     det = det.assign(acq_date=pd.to_datetime(det["acq_date"]))
     acq = det.set_index("det_id")["acq_date"]
     exp = detection_pixels(det, ring).merge(candidate_months(det, tol_days), on="det_id")
@@ -261,7 +262,7 @@ def evaluate(det: pd.DataFrame, rec: pd.DataFrame, tol_days: int = TOL_DAYS, rin
     m["burn_dt"] = pd.to_datetime(m["burn_dt"])
     m["days_diff"] = (m["burn_dt"] - m["acq_date"]).dt.days
     m["in_tol"] = burned & (m["days_diff"].abs() <= tol_days)
-    m["persistent"] = ((m["qa"].fillna(0).to_numpy("int64") >> 5) & 7) == 5  # QA bit5–7 özel kod 5
+    m["persistent"] = ((m["qa"].fillna(0).to_numpy("int64") >> 5) & 7) == 5  # QA bit5–7 special code 5
 
     def n_px(mask: pd.Series) -> pd.Series:
         return m.loc[mask, ["det_id", "grow", "gcol"]].drop_duplicates().groupby("det_id").size()
@@ -288,7 +289,7 @@ def evaluate(det: pd.DataFrame, rec: pd.DataFrame, tol_days: int = TOL_DAYS, rin
     agg["matched"] = pd.array(np.where(np.isin(status, ["no_data", "unknown"]), None,
                                        status == "burned_match"), dtype="boolean")
 
-    # en yakın yanma kaydı (varsa) → tarih/doy/belirsizlik/qa
+    # nearest burn record (if any) → date/doy/uncertainty/qa
     best = (m[burned].assign(absd=m.loc[burned, "days_diff"].abs())
             .sort_values(["det_id", "absd"]).drop_duplicates("det_id").set_index("det_id"))
     agg["burn_date"] = best["burn_dt"].dt.date

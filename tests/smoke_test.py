@@ -1,9 +1,9 @@
-"""Uçtan uca duman testi — sahibi P4 Barış. Sözleşme: docs/CONTRACT.md
+"""End-to-end smoke test — owner P4 Barış. Contract: docs/CONTRACT.md
 
-Çalıştır (repo kökünden):  python tests/smoke_test.py
-Var olan pipeline çıktılarını sözleşmeye göre kontrol eder (olmayanlar "ATLANDI"),
-sonra app/query.py API'sini o an seçili veri dosyasıyla uçtan uca dener.
-Çıkış kodu: 0 = hepsi geçti, 1 = en az bir hata.
+Run (from the repo root):  python tests/smoke_test.py
+Checks the existing pipeline outputs against the contract (missing ones are skipped, "ATLANDI"),
+then exercises the app/query.py API end to end with the currently selected data file.
+Exit code: 0 = all passed, 1 = at least one failure.
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def expect_error(fn) -> None:
     raise AssertionError("ValueError bekleniyordu")
 
 
-# ---------------------------------------------------------------- 0. ortam (herkes aynı Python + paketler)
+# ---------------------------------------------------------------- 0. environment (everyone has the same Python + packages)
 
 @check("ortam: Python 3.12 + requirements.txt sürümleri")
 def _():
@@ -69,7 +69,7 @@ def _():
     return f"Python {have_py}, {sum('==' in l for l in (ROOT / 'requirements.txt').read_text().splitlines())} paket"
 
 
-# ---------------------------------------------------------------- 1. doğrulayıcının kendisi
+# ---------------------------------------------------------------- 1. the validator itself
 
 @check("contract: doğrulayıcı hatalı veriyi yakalıyor")
 def _():
@@ -78,10 +78,10 @@ def _():
     expect_error(lambda: validate_hotspots(df.assign(weight_harm=np.float32(1.0)), "ingest"))
     bad = df.copy()
     bad["acq_time"] = bad["acq_time"] + 1
-    expect_error(lambda: validate_hotspots(bad, "any"))  # datetime_utc artık tutmuyor
+    expect_error(lambda: validate_hotspots(bad, "any"))  # datetime_utc no longer matches
 
 
-# ---------------------------------------------------------------- 2. pipeline çıktıları (varsa)
+# ---------------------------------------------------------------- 2. pipeline outputs (if present)
 
 @check("P1 data/hotspots.parquet → sözleşme (ingest)")
 def _():
@@ -163,7 +163,7 @@ def _():
         return f"⚠️ {(m['data'] != 'harm').sum()} satır harmonize olmayan veriden (repoya commit'leme)"
 
 
-# ---------------------------------------------------------------- 3. query.py uçtan uca
+# ---------------------------------------------------------------- 3. query.py end to end
 
 @check("query.data_info()")
 def _():
@@ -270,7 +270,7 @@ def _():
             f"Hohes Venn: {hv['label']} ({hv['years_with_detections']}/{hv['n_years']} yıl tespit)")
 
 
-# ---------------------------------------------------------------- rapor
+# ---------------------------------------------------------------- report
 
 if __name__ == "__main__":
     width = max(len(n) for _, n, _ in results)

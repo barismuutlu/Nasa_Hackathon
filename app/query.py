@@ -1,10 +1,10 @@
-"""Veri katmanı — sahibi P4 Barış. API sözleşmesi: docs/CONTRACT.md §7.4.
+"""Data layer — owner P4 Barış. API contract: docs/CONTRACT.md §7.4.
 
-P5 (app.py) parquet'i doğrudan okumaz; sadece bu modülü kullanır:
+P5 (app.py) does not read the parquet directly; it ONLY uses this module:
     from query import PRESETS, data_info, get_hotspots, monthly_matrix, anomaly, to_csv_bytes, forecast, seasonal_outlook
 
-Bu modül Streamlit'e bağımlı değildir (pipeline/ ve testlerden de kullanılabilir).
-Önbellekleme (st.cache_data) app.py'nin işidir; burada sadece dosya okuması önbellekli.
+This module does not depend on Streamlit (it can also be used from pipeline/ and tests).
+Caching (st.cache_data) is app.py's job; here ONLY the file read is cached.
 """
 from __future__ import annotations
 
@@ -23,28 +23,28 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from contract import CONTRACT_VERSION, MOCK_VERSION, validate_hotspots  # noqa: E402
 
-# Öncelik sırası: ilk bulunan dosya kullanılır (kök CLAUDE.md §4)
+# Priority order: the first file found is used (root CLAUDE.md §4)
 DATA_CANDIDATES = [
-    ROOT / "data" / "hotspots_harm.parquet",          # P2 — harmonize, tam veri
-    ROOT / "data" / "hotspots.parquet",               # P1 — ham, weight_harm NaN
+    ROOT / "data" / "hotspots_harm.parquet",          # P2 — harmonized, full data
+    ROOT / "data" / "hotspots.parquet",               # P1 — raw, weight_harm NaN
     ROOT / "data" / "deploy" / "hotspots_deploy.parquet",  # Streamlit Cloud
-    ROOT / "data" / "mock" / "hotspots_mock.parquet",      # P4 — sahte
+    ROOT / "data" / "mock" / "hotspots_mock.parquet",      # P4 — mock
 ]
 
-# ad -> (lon_min, lat_min, lon_max, lat_max)
+# name -> (lon_min, lat_min, lon_max, lat_max)
 PRESETS: dict[str, tuple[float, float, float, float]] = {
     "Hohes Venn": (5.95, 50.45, 6.25, 50.60),
-    "Aachen/Eifel": (5.96, 50.44, 6.44, 50.83),   # = indirme alanı (contract.REGIONS)
+    "Aachen/Eifel": (5.96, 50.44, 6.44, 50.83),   # = download area (contract.REGIONS)
     "La Rioja (AR)": (-69.7, -31.9, -65.4, -27.6),
 }
 
 MONTH_LABELS = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"]
 
 
-# ---------------------------------------------------------------- yükleme
+# ---------------------------------------------------------------- loading
 
 def data_path() -> Path:
-    """Kullanılacak parquet yolu: $HOTSPOTS_PATH, yoksa DATA_CANDIDATES'ten ilk var olan."""
+    """Parquet path to use: $HOTSPOTS_PATH, otherwise the first existing one from DATA_CANDIDATES."""
     env = os.environ.get("HOTSPOTS_PATH")
     if env:
         p = Path(env)
@@ -63,20 +63,20 @@ def data_path() -> Path:
 def _load(path_str: str, mtime: float) -> pd.DataFrame:
     df = pd.read_parquet(path_str, engine="pyarrow")
     try:
-        validate_hotspots(df, stage="any", max_rows=200_000)  # tam kontrol P1/P2 yazarken yapıldı
+        validate_hotspots(df, stage="any", max_rows=200_000)  # full check was done when P1/P2 wrote it
     except ValueError as e:
         raise ValueError(f"{path_str} sözleşmeye uymuyor:\n{e}") from e
     return df
 
 
 def load_hotspots() -> pd.DataFrame:
-    """Tüm veri (önbellekli; dosya değişirse yeniden okunur). Değiştirme — kopyala."""
+    """All data (cached; re-read if the file changes). Do not modify — copy."""
     p = data_path()
     return _load(str(p), p.stat().st_mtime)
 
 
 def data_info() -> dict[str, Any]:
-    """Uygulamada gösterilecek veri özeti (ör. 'MOCK VERİ' uyarısı için)."""
+    """Data summary to show in the app (e.g. for the 'MOCK VERİ' warning)."""
     p = data_path()
     df = load_hotspots()
     return {
@@ -93,15 +93,15 @@ def data_info() -> dict[str, Any]:
 
 
 def _satellite_ranges(df: pd.DataFrame) -> dict[str, tuple[pd.Timestamp, pd.Timestamp]]:
-    """Uydu → (ilk, son) tespit tarihi, VERİDEN. Grafikteki uydu değişim çizgileri için."""
+    """Satellite → (first, last) detection date, FROM THE DATA. For the satellite-change lines in the chart."""
     g = df.groupby("satellite", observed=True)["acq_date"].agg(["min", "max"]).sort_values("min")
     return {str(s): (r["min"], r["max"]) for s, r in g.iterrows()}
 
 
-# ---------------------------------------------------------------- sorgular
+# ---------------------------------------------------------------- queries
 
 def _parse_geom(geom) -> tuple[tuple[float, float, float, float], Any | None]:
-    """bbox tuple ya da GeoJSON (Feature / Polygon / MultiPolygon) → (bbox, poligon|None)."""
+    """bbox tuple or GeoJSON (Feature / Polygon / MultiPolygon) → (bbox, polygon|None)."""
     if isinstance(geom, str):
         if geom not in PRESETS:
             raise ValueError(f"Bilinmeyen hazır bölge: {geom!r}. Seçenekler: {list(PRESETS)}")
@@ -121,13 +121,13 @@ def _parse_geom(geom) -> tuple[tuple[float, float, float, float], Any | None]:
 
 
 def get_hotspots(geom, start=None, end=None, harmonized: bool = False) -> pd.DataFrame:
-    """Bölge + tarih aralığındaki tespitler.
+    """Detections within the region + date range.
 
-    geom: PRESETS anahtarı, bbox (lon_min, lat_min, lon_max, lat_max) ya da
-          GeoJSON dict (streamlit-folium `last_active_drawing` doğrudan verilebilir).
-    start, end: UTC tarih (dahil); None = sınırsız.
-    Dönüş: CONTRACT §1 sütunları, aynı dtype'lar; 0 satır olabilir.
-    harmonized: True → sadece harmonize seriye katkı veren satırlar (weight_harm > 0).
+    geom: PRESETS key, bbox (lon_min, lat_min, lon_max, lat_max) or
+          GeoJSON dict (streamlit-folium `last_active_drawing` can be passed directly).
+    start, end: UTC date (inclusive); None = unbounded.
+    Returns: CONTRACT §1 columns, same dtypes; may have 0 rows.
+    harmonized: True → ONLY rows that contribute to the harmonized series (weight_harm > 0).
     """
     (lon_min, lat_min, lon_max, lat_max), poly = _parse_geom(geom)
     df = load_hotspots()
@@ -140,22 +140,22 @@ def get_hotspots(geom, start=None, end=None, harmonized: bool = False) -> pd.Dat
         m &= df["weight_harm"].fillna(0) > 0
     out = df.loc[m]
     if poly is not None and len(out):
-        inside = shapely.intersects_xy(poly,  # sınır dahil (bbox ile tutarlı)
+        inside = shapely.intersects_xy(poly,  # boundary inclusive (consistent with bbox)
                                          out["longitude"].to_numpy(), out["latitude"].to_numpy())
         out = out.loc[inside]
     return out.copy()
 
 
 def monthly_matrix(df: pd.DataFrame, mode: str = "raw", start=None, end=None) -> pd.DataFrame:
-    """Yıl × ay tablosu (index=yıl, columns=1..12).
+    """Year × month table (index=year, columns=1..12).
 
-    mode="raw":  tespit sayısı (tüm uydular — uydu eklenince sıçrar)
-    mode="harm": Σ weight_harm (MODIS-eşdeğeri)
-    Veri kapsamı dışındaki aylar (ör. 2000 Oca–Eki, gelecek aylar) NaN; kapsam içinde tespit yoksa 0.
-    Harmonize veri yoksa (P2 öncesi) mode="harm" tamamen NaN döner.
-    start, end: get_hotspots'a verilen tarih filtresinin AYNISI. Verilirse aralığın dışındaki aylar da NaN
-    olur (0 değil) → yıllık toplam ve anomali tabanı filtrelenen yılları "0 tespit" saymaz.
-    Aralığın kısmen dahil olduğu ilk/son ay dahil sayılır.
+    mode="raw":  detection count (all satellites — jumps when a satellite is added)
+    mode="harm": Σ weight_harm (MODIS-equivalent)
+    Months outside the data coverage (e.g. 2000 Jan–Oct, future months) are NaN; 0 if no detection within coverage.
+    If there is no harmonized data (before P2), mode="harm" returns all NaN.
+    start, end: the SAME date filter passed to get_hotspots. If given, months outside the range also become NaN
+    (not 0) → the yearly total and the anomaly baseline do not count filtered-out years as "0 detections".
+    The first/last month partially covered by the range counts as included.
     """
     if mode not in ("raw", "harm"):
         raise ValueError(f"mode 'raw' ya da 'harm' olmalı, gelen: {mode!r}")
@@ -171,7 +171,7 @@ def monthly_matrix(df: pd.DataFrame, mode: str = "raw", start=None, end=None) ->
     mat = agg.unstack("month").reindex(index=years, columns=range(1, 13)).astype("float64")
     mat = mat.fillna(0.0)
 
-    # kapsam dışı ve tarih filtresi dışı aylar NaN
+    # months outside coverage and outside the date filter are NaN
     lo = max(cov_start, pd.Timestamp(start).to_period("M")) if start is not None else cov_start
     hi = min(cov_end, pd.Timestamp(end).to_period("M")) if end is not None else cov_end
     for y in years:
@@ -188,10 +188,10 @@ def monthly_matrix(df: pd.DataFrame, mode: str = "raw", start=None, end=None) ->
 
 
 def anomaly(matrix: pd.DataFrame, year: int, month: int) -> dict[str, Any]:
-    """Seçili ayın, aynı takvim ayının diğer yıllarına göre anomalisi.
+    """Anomaly of the selected month relative to the same calendar month in other years.
 
-    rank: 1 = o ay için en yüksek yıl. label: "çok yüksek" (z>2), "yüksek" (z>1),
-    "normal", "düşük" (z<-1), "tespit yok" (hep 0), "veri yok".
+    rank: 1 = highest year for that month. label: "çok yüksek" (z>2), "yüksek" (z>1),
+    "normal", "düşük" (z<-1), "tespit yok" (all 0), "veri yok".
     """
     value = matrix.at[year, month] if year in matrix.index else np.nan
     base = matrix[month].drop(index=year, errors="ignore").dropna()
@@ -212,18 +212,18 @@ def anomaly(matrix: pd.DataFrame, year: int, month: int) -> dict[str, Any]:
 
 
 def to_csv_bytes(df: pd.DataFrame) -> bytes:
-    """st.download_button için CSV (UTF-8, index'li tablolar için index korunur)."""
+    """CSV for st.download_button (UTF-8; the index is kept for indexed tables)."""
     keep_index = df.index.name is not None
-    return df.to_csv(index=keep_index, lineterminator="\n").encode("utf-8")  # Windows'ta da \n
+    return df.to_csv(index=keep_index, lineterminator="\n").encode("utf-8")  # \n on Windows too
 
 
-# ---------------------------------------------------------------- deneysel 30 günlük görünüm (v1.5)
+# ---------------------------------------------------------------- experimental 30-day outlook (v1.5)
 
 FORECAST_PATH = ROOT / "data" / "deploy" / "forecast.parquet"            # pipeline/forecast.py (P4)
 FORECAST_HISTORY = ROOT / "data" / "deploy" / "forecast_history.parquet"
 FORECAST_METRICS = ROOT / "docs" / "forecast" / "metrics.json"
-FORECAST_RATIO = 1.5    # oran ≥ 1.5 → "above normal", ≤ 1/1.5 → "below normal", arası "near normal"
-PROFILE_YEARS = 10      # mevsim profili ve mevsimsel normal: son 10 tam yıl
+FORECAST_RATIO = 1.5    # ratio ≥ 1.5 → "above normal", ≤ 1/1.5 → "below normal", in between "near normal"
+PROFILE_YEARS = 10      # seasonal profile and seasonal normal: last 10 full years
 
 
 @lru_cache(maxsize=2)
@@ -239,12 +239,12 @@ def _load_forecast(path_str: str, mtime: float) -> tuple[pd.DataFrame, pd.DataFr
 def _same_window(year: int, start: pd.Timestamp) -> pd.Timestamp:
     try:
         return start.replace(year=year)
-    except ValueError:                                  # 29 Şubat
+    except ValueError:                                  # 29 February
         return start.replace(year=year, day=28)
 
 
 def _seasonal_profile(df: pd.DataFrame, last_full_year: int) -> pd.Series:
-    """Takvim ayı → son PROFILE_YEARS tam yılın aylık ortalaması (MODIS-eşd. ya da ham sayı)."""
+    """Calendar month → monthly mean over the last PROFILE_YEARS full years (MODIS-equiv. or raw count)."""
     mode = "harm" if df["weight_harm"].notna().any() else "raw"
     mat = monthly_matrix(df, mode)
     rows = mat.loc[(mat.index > last_full_year - PROFILE_YEARS) & (mat.index <= last_full_year)]
@@ -254,26 +254,26 @@ def _seasonal_profile(df: pd.DataFrame, last_full_year: int) -> pd.Series:
 
 
 def forecast(geom) -> dict[str, Any] | None:
-    """Deneysel 30 günlük tespit görünümü (CONTRACT §7.5) — test edilmiş model, sadece Arjantin.
+    """Experimental 30-day detection outlook (CONTRACT §7.5) — tested model, Argentina ONLY.
 
-    Bölgede görünüm hücresi yoksa (1° hücre MERKEZİ geom içinde) None → uygulama seasonal_outlook(geom)'a düşer.
-    Bölge toplamı = (Σ expected_geo / Σ normal_geo) × Σ normal (pipeline/forecast.py ile aynı hesap).
+    If the region has no outlook cell (1° cell CENTER inside geom) → None → the app falls back to seasonal_outlook(geom).
+    Region total = (Σ expected_geo / Σ normal_geo) × Σ normal (same computation as pipeline/forecast.py).
     """
     r = _outlook(geom)
     return r if r is not None and r["mode"] == "model" else None
 
 
 def seasonal_outlook(geom) -> dict[str, Any] | None:
-    """Model olmayan bölgeler için (ör. Hohes Venn) aynı 30 günlük pencerenin MEVSİMSEL NORMALİ — TAHMİN DEĞİL.
+    """For regions without a model (e.g. Hohes Venn), the SEASONAL NORMAL of the same 30-day window — NOT A FORECAST.
 
-    pred = normal; "history" (geçmiş yıllar) ve "profile" (12 ay) grafik için. Bölgede hiç veri yoksa None.
-    Model bölgesinde (Arjantin) de çağrılabilir: o zaman forecast() sonucunu döndürür (mode="model").
+    pred = normal; "history" (past years) and "profile" (12 months) are for the chart. None if the region has no data at all.
+    Can also be called in the model region (Argentina): then it returns the forecast() result (mode="model").
     """
     return _outlook(geom)
 
 
 def _outlook(geom) -> dict[str, Any] | None:
-    """forecast() / seasonal_outlook() ortak hesabı. mode = "model" | "seasonal"."""
+    """Shared computation for forecast() / seasonal_outlook(). mode = "model" | "seasonal"."""
     if not FORECAST_PATH.exists():
         return None
     f, h, meta = _load_forecast(str(FORECAST_PATH), FORECAST_PATH.stat().st_mtime)
@@ -289,7 +289,7 @@ def _outlook(geom) -> dict[str, Any] | None:
             "profile": _seasonal_profile(det, last_full_year) if len(det) else pd.Series(
                 0.0, index=pd.RangeIndex(1, 13, name="month"), name="normal")}
 
-    if not cells.empty:                                           # ---- model modu (Arjantin)
+    if not cells.empty:                                           # ---- model mode (Argentina)
         ratio = float(cells["expected_geo"].sum() / cells["normal_geo"].sum())
         normal = float(cells["normal"].sum())
         pred = ratio * normal
@@ -298,7 +298,7 @@ def _outlook(geom) -> dict[str, Any] | None:
                  "below normal" if ratio <= 1 / FORECAST_RATIO else "near normal")
         hist = (h.merge(cells[["cell_lat", "cell_lon"]], on=["cell_lat", "cell_lon"])
                 .groupby("year")["detections"].sum())
-        cells = cells.assign(ratio=(cells["expected_geo"] + 1) / (cells["normal_geo"] + 1))  # harita, yumuşatılmış
+        cells = cells.assign(ratio=(cells["expected_geo"] + 1) / (cells["normal_geo"] + 1))  # map, smoothed
         return {**base, "mode": "model", "pred": pred,
                 "p10": float(np.expm1(np.log1p(pred) + sc["err_log_p10"])),
                 "p90": float(np.expm1(np.log1p(pred) + sc["err_log_p90"])),
@@ -307,10 +307,10 @@ def _outlook(geom) -> dict[str, Any] | None:
                 "backtest_years": tuple(meta["test_years"]),
                 "history": hist.rename("detections"), "cells": cells}
 
-    if det.empty:                                                 # bu alan için hiç veri indirilmedi
+    if det.empty:                                                 # no data was downloaded for this area
         return None
     w = det["weight_harm"] if det["weight_harm"].notna().any() else pd.Series(1.0, index=det.index)
-    years = range(int(det["year"].min()) + 1, start.year)           # ilk yıl kısmi olabilir
+    years = range(int(det["year"].min()) + 1, start.year)           # first year may be partial
     hist = pd.Series({y: float(w[det["acq_date"].between(_same_window(y, start),
                                                          _same_window(y, start) + pd.Timedelta(days=29))].sum())
                       for y in years}, name="detections")
@@ -325,7 +325,7 @@ def _outlook(geom) -> dict[str, Any] | None:
             "history": hist, "cells": cells}
 
 
-# ---------------------------------------------------------------- hızlı kontrol
+# ---------------------------------------------------------------- quick check
 
 if __name__ == "__main__":
     info = data_info()

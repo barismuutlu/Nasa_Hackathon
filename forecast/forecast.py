@@ -1,24 +1,24 @@
-"""EXPERIMENTAL — P2 prototipi: 1 ay ileri tespit görünümü (one-month detection outlook).
-Sahibi: Bahtiyar. Ana pipeline'a ve uygulamaya bağlı DEĞİL; sonuçları ürün çıktısı olarak sunulmaz.
+"""EXPERIMENTAL — P2 prototype: one-month-ahead detection outlook.
+Owner: Bahtiyar. NOT connected to the main pipeline or the app; its results are not presented as product output.
 
-Soru: Harmonize 26 yıllık takvim, GELECEK AY için "normalin altında / normal / üstünde" diyebilir mi?
-Bu bir yangın tahmini DEĞİLDİR: hava durumu / kuraklık / yakıt nemi / tutuşma verisi yok. Kullandığı iki bilgi:
-  1) mevsimsellik — hücrenin o takvim ayındaki tarihsel düzeyi (log1p ortalaması = "normal")
-  2) kalıcılık    — son tam ayın normalden sapması (hücrenin kendisi + bölge ortalaması)
-Model (hücreler havuzlanmış EKK, sabit yok):
-  log1p(y[c, t]) = normal[c, ay(t)] + a · sapma[c, t−1] + b · sapma_bölge[t−1] + hata
-Birim: harmonize (MODIS-eşdeğeri) tespit / 1° hücre / ay. Harmonize seri şart: ham seride 2012/2018/2023
-uydu sıçramaları "normal"i bozar.
+Question: can the harmonized 26-year calendar say "below normal / normal / above normal" for NEXT MONTH?
+This is NOT a fire forecast: there is no weather / drought / fuel moisture / ignition data. It uses two pieces of information:
+  1) seasonality — the cell's historical level in that calendar month (log1p mean = "normal")
+  2) persistence — the last full month's deviation from normal (the cell itself + the regional mean)
+Model (OLS pooled over cells, no intercept):
+  log1p(y[c, t]) = normal[c, month(t)] + a · deviation[c, t−1] + b · regional_deviation[t−1] + error
+Unit: harmonized (MODIS-equivalent) detections / 1° cell / month. A harmonized series is required: in the raw series the
+2012/2018/2023 satellite jumps distort the "normal".
 
-Neden sadece 1 ay: geriye dönük testte beceri 1 ayda ≈0.25, 2 ayda ≈0.13, 3+ ayda <0.1 (normalden farksız).
+Why only 1 month: in the backtest, skill is ≈0.25 at 1 month, ≈0.13 at 2 months, <0.1 at 3+ months (no different from normal).
 
-Geriye dönük test (2015–2025): her test yılı için model yalnız önceki yıllarla kurulur; kıyas = sadece normal.
-  beceri   = 1 − MSE_model / MSE_normal (log uzayı; ≤ 0 → normalden iyi değil)
-  yön isabeti = tahmin edilen sapmanın işareti gerçekleşenle aynı mı (şans = %50)
+Backtest (2015–2025): for each test year the model is fitted on earlier years only; baseline = normal only.
+  skill   = 1 − MSE_model / MSE_normal (log space; ≤ 0 → no better than normal)
+  direction hit rate = whether the sign of the predicted deviation matches the observed one (chance = 50%)
 
-Girdi : data/monthly_grid.parquet (P2 harmonize çıktısı)
-Çıktı : forecast/out/outlook_cells.csv, backtest.json, outlook_1month.png
-Çalıştırma (repo kökünden):  python forecast/forecast.py
+Input : data/monthly_grid.parquet (P2 harmonize step output)
+Output: forecast/out/outlook_cells.csv, backtest.json, outlook_1month.png
+Run (from the repo root):  python forecast/forecast.py
 """
 from __future__ import annotations
 
@@ -31,22 +31,22 @@ import pandas as pd
 GRID_PATH = Path("data/monthly_grid.parquet")
 OUT = Path("forecast/out")
 REGION = "argentina"
-FIRST_YEAR = 2003            # Terra+Aqua tam yıl; öncesi Terra-only düzeltmeli dönem
+FIRST_YEAR = 2003            # Terra+Aqua full year; before that, the corrected Terra-only period
 TEST_YEARS = range(2015, 2026)
-MIN_TOTAL = 200              # tüm dönemde bundan az harmonize tespiti olan 1° hücreler modele girmez
-BELOW, ABOVE = 0.67, 1.5     # beklenen / normal oranı: < 0.67 "below", > 1.5 "above", arası "near normal"
+MIN_TOTAL = 200              # 1° cells with fewer harmonized detections than this over the whole period are excluded from the model
+BELOW, ABOVE = 0.67, 1.5     # expected / normal ratio: < 0.67 "below", > 1.5 "above", in between "near normal"
 Q_LO, Q_HI = 0.10, 0.90
 
 
 def load_matrix() -> tuple[pd.DataFrame, pd.Period, float]:
-    """Satır = ay, sütun = 1° hücre, değer = harmonize tespit. Son TAM ay ile biter.
-    Ayrıca hedef ayın (kısmi) şu ana kadarki bölge toplamını döndürür."""
+    """Row = month, column = 1° cell, value = harmonized detections. Ends with the last FULL month.
+    Also returns the regional total of the (partial) target month so far."""
     g = pd.read_parquet(GRID_PATH)
     g = g[(g["region"] == REGION) & (g["year"] >= FIRST_YEAR)]
     g = g.assign(lat1=np.floor(g["cell_lat"]) + 0.5, lon1=np.floor(g["cell_lon"]) + 0.5,
                  t=pd.PeriodIndex.from_fields(year=g["year"], month=g["month"], freq="M"))
     m = g.pivot_table(index="t", columns=["lat1", "lon1"], values="n_harm", aggfunc="sum")
-    last_full = m.index.max() - 1          # son ay kısmi (veri ayın ortasında bitiyor)
+    last_full = m.index.max() - 1          # last month is partial (data ends mid-month)
     keep = m.loc[:last_full].sum() >= MIN_TOTAL
     partial = float(m.loc[last_full + 1, keep].sum())
     m = m.reindex(pd.period_range(f"{FIRST_YEAR}-01", last_full, freq="M")).fillna(0.0)
@@ -54,7 +54,7 @@ def load_matrix() -> tuple[pd.DataFrame, pd.Period, float]:
 
 
 def normal(logm: pd.DataFrame) -> pd.DataFrame:
-    return logm.groupby(logm.index.month).mean()          # index = ay 1..12
+    return logm.groupby(logm.index.month).mean()          # index = month 1..12
 
 
 def deviations(logm: pd.DataFrame, norm: pd.DataFrame) -> pd.DataFrame:
@@ -74,13 +74,13 @@ def backtest(m: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     rows = []
     for year in TEST_YEARS:
         norm = normal(logm[logm.index.year < year])
-        dev = deviations(logm[logm.index.year <= year], norm)   # hedef ayın geçmişi gerçek zamanda bilinir
+        dev = deviations(logm[logm.index.year <= year], norm)   # the target month's history is known in real time
         a, b = fit(dev[dev.index.year < year])
         for t in (t for t in dev.index if t.year == year):
             src, true = dev.loc[t - 1], dev.loc[t]
             pred = a * src + b * src.mean()
             n_row = norm.loc[t.month]
-            big = pred.abs() > 0.2                                # yön isabeti: sadece belirgin tahminler
+            big = pred.abs() > 0.2                                # direction hit rate: only clear predictions
             rows.append(dict(t=str(t), se_model=float(((pred - true) ** 2).mean()), se_norm=float((true ** 2).mean()),
                              hits=int((np.sign(pred[big]) == np.sign(true[big])).sum()), n_dir=int(big.sum()),
                              obs=float(m.loc[t].sum()), model=float(np.expm1(n_row + pred).clip(lower=0).sum()),
@@ -135,7 +135,7 @@ def plot(cells: pd.DataFrame, reg: dict, bt: pd.DataFrame, summary: dict) -> Non
     from matplotlib.colors import LinearSegmentedColormap
 
     fig, (ax, ax2) = plt.subplots(1, 2, figsize=(13.5, 5.2), dpi=150, gridspec_kw={"width_ratios": [1, 2.3]})
-    # sol: hücre haritası — beklenen / normal (iki uçlu: mavi = altında, gri = normal, kırmızı = üstünde)
+    # left: cell map — expected / normal (diverging: blue = below, grey = normal, red = above)
     cmap = LinearSegmentedColormap.from_list("div", ["#2a6fb0", "#d9d6cf", "#c8320a"])
     sc = ax.scatter(cells["cell_lon"], cells["cell_lat"], c=np.log2(cells["ratio_to_normal"]).clip(-1.6, 1.6),
                     cmap=cmap, vmin=-1.6, vmax=1.6, marker="s", s=62, linewidths=0)
@@ -145,7 +145,7 @@ def plot(cells: pd.DataFrame, reg: dict, bt: pd.DataFrame, summary: dict) -> Non
     cb = fig.colorbar(sc, ax=ax, shrink=0.75, ticks=[-1.585, -1, 0, 1, 1.585])
     cb.ax.set_yticklabels(["⅓×", "½×", "normal", "2×", "3×"])
     cb.outline.set_visible(False)
-    # sağ: geriye dönük test — bölge toplamı, 1 ay önceden yapılan tahmin
+    # right: backtest — regional total, prediction made 1 month ahead
     x = pd.PeriodIndex(bt["t"], freq="M").to_timestamp()
     ax2.plot(x, bt["obs"] / 1e3, color="#3b3834", lw=1.6, label="Observed (harmonized)")
     ax2.plot(x, bt["model"] / 1e3, color="#d9742b", lw=1.6, label="Outlook made one month earlier")
@@ -171,7 +171,7 @@ def main() -> None:
     if not GRID_PATH.exists():
         raise FileNotFoundError(f"{GRID_PATH} yok — önce: python pipeline/harmonize.py")
     OUT.mkdir(parents=True, exist_ok=True)
-    for old in ("outlook_region.csv", "outlook_argentina.png"):      # 12 aylık ilk sürümün çıktıları
+    for old in ("outlook_region.csv", "outlook_argentina.png"):      # outputs of the first 12-month version
         (OUT / old).unlink(missing_ok=True)
     m, last_full, partial = load_matrix()
     print(f"{m.shape[1]} hücre (1°), {m.index[0]} → {last_full} (son tam ay)")

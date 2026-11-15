@@ -1,14 +1,14 @@
-"""Veri sözleşmesi v1.4 — sahibi P4 Barış. Belge: docs/CONTRACT.md
+"""Data contract v1.4 — owner P4 Barış. Document: docs/CONTRACT.md
 
-Sadece SABİTLER ve DOĞRULAYICI içerir; ingest/harmonize mantığı burada YOK.
-Kullanım (pipeline/ veya app/ içinden):
+Contains ONLY CONSTANTS and the VALIDATOR; ingest/harmonize logic is NOT here.
+Usage (from inside pipeline/ or app/):
 
     import sys; from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from contract import validate_hotspots, SATELLITE_CODES, REGIONS
 
-    validate_hotspots(df, stage="ingest")   # P1: parquet yazmadan önce
-    validate_hotspots(df, stage="harm")     # P2: hotspots_harm.parquet yazmadan önce
+    validate_hotspots(df, stage="ingest")   # P1: before writing the parquet
+    validate_hotspots(df, stage="harm")     # P2: before writing hotspots_harm.parquet
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ import pandas as pd
 
 CONTRACT_VERSION = "1.5"
 
-# ---------------------------------------------------------------- sabit değer kümeleri
+# ---------------------------------------------------------------- fixed value sets
 
 INSTRUMENTS = ["MODIS", "VIIRS"]
 SATELLITES = ["Terra", "Aqua", "SNPP", "NOAA20", "NOAA21"]
@@ -28,7 +28,7 @@ CONFIDENCE_CLASSES = ["low", "nominal", "high"]
 DAYNIGHT = ["D", "N"]
 SOURCES = ["archive", "nrt"]
 
-# FIRMS 'satellite' sütunundaki kodlar → kanonik ad. Burada olmayan kod → hata (sessizce atma).
+# Codes in the FIRMS 'satellite' column → canonical name. A code not listed here → error (do not drop silently).
 SATELLITE_CODES = {
     "Terra": "Terra", "T": "Terra",
     "Aqua": "Aqua", "A": "Aqua",
@@ -37,25 +37,25 @@ SATELLITE_CODES = {
     "N21": "NOAA21", "2": "NOAA21", "J2": "NOAA21", "NOAA-21": "NOAA21",
 }
 
-# VIIRS confidence → sınıf. MODIS için: modis_confidence_class() (proje kuralı, FIRMS'te sayısal eşik yok)
+# VIIRS confidence → class. For MODIS: modis_confidence_class() (project rule, FIRMS has no numeric threshold)
 VIIRS_CONFIDENCE_CLASS = {"l": "low", "n": "nominal", "h": "high",
                           "low": "low", "nominal": "nominal", "high": "high"}
 MODIS_CONFIDENCE_CUTS = (30, 80)   # <30 low, 30–79 nominal, ≥80 high
 
-# İndirme alanları (FIRMS indirme aracı / DL_FIRE). Alanlar ÇAKIŞMAZ → aynı tespit iki alanda olmaz.
-# data/raw/<slug>/ klasör adı = region değeri. bbox = (lon_min, lat_min, lon_max, lat_max), None = ülke.
-# FIRMS ülke-YIL dosyaları KULLANILMAZ: 2026 ve NOAA-21 içermiyorlar.
+# Download areas (FIRMS download tool / DL_FIRE). Areas DO NOT OVERLAP → the same detection is never in two areas.
+# data/raw/<slug>/ folder name = region value. bbox = (lon_min, lat_min, lon_max, lat_max), None = country.
+# FIRMS country-YEAR files are NOT USED: they do not include 2026 or NOAA-21.
 REGIONS: dict[str, tuple[float, float, float, float] | None] = {
-    "argentina": None,                          # ülke (La Rioja + P2 eğitimi)
-    "aachen_eifel": (5.96, 50.44, 6.44, 50.83),  # bbox, Hohes Venn dahil (Belçika tarafı da)
+    "argentina": None,                          # country (La Rioja + P2 training)
+    "aachen_eifel": (5.96, 50.44, 6.44, 50.83),  # bbox, includes Hohes Venn (Belgian side too)
 }
 REGION_SLUG = re.compile(r"^[a-z0-9_]+$")
 
-MOCK_VERSION = "MOCK"   # sahte verinin 'version' değeri → her satır sentetik olarak işaretli
+MOCK_VERSION = "MOCK"   # 'version' value of mock data → every row is marked as synthetic
 
-# ---------------------------------------------------------------- şema
+# ---------------------------------------------------------------- schema
 
-# sütun → (pandas dtype, null olabilir mi)
+# column → (pandas dtype, nullable?)
 SCHEMA: dict[str, tuple[str, bool]] = {
     "latitude":         ("float64", False),
     "longitude":        ("float64", False),
@@ -90,12 +90,12 @@ CATEGORIES = {
     "source": SOURCES,
 }
 
-# Tekrar anahtarı (aynı kaynak içinde birebir aynı gözlem). region ve source anahtarda YOK.
+# Duplicate key (exactly the same observation within the same source). region and source are NOT in the key.
 DEDUP_KEY = ["satellite", "datetime_utc", "lat4", "lon4"]   # lat4/lon4 = round(…, 4)
 
 
 def modis_confidence_class(conf: pd.Series) -> pd.Series:
-    """MODIS 0–100 → low/nominal/high (proje kuralı, MODIS_CONFIDENCE_CUTS)."""
+    """MODIS 0–100 → low/nominal/high (project rule, MODIS_CONFIDENCE_CUTS)."""
     c = pd.to_numeric(conf, errors="raise")
     lo, hi = MODIS_CONFIDENCE_CUTS
     return pd.Series(pd.cut(c, [-1, lo - 1, hi - 1, 100], labels=CONFIDENCE_CLASSES).astype(str),
@@ -103,7 +103,7 @@ def modis_confidence_class(conf: pd.Series) -> pd.Series:
 
 
 def empty_frame() -> pd.DataFrame:
-    """Şemaya uygun boş DataFrame (testler / boş sonuçlar için)."""
+    """Empty DataFrame matching the schema (for tests / empty results)."""
     data = {}
     for col, (dtype, _) in SCHEMA.items():
         if dtype == "category":
@@ -113,18 +113,18 @@ def empty_frame() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
-# ---------------------------------------------------------------- doğrulama
+# ---------------------------------------------------------------- validation
 
 def validate_hotspots(df: pd.DataFrame, stage: str = "ingest", max_rows: int | None = None) -> None:
-    """Şemayı doğrular; sorun varsa TÜM sorunları listeleyen ValueError fırlatır.
+    """Validates the schema; if there are problems, raises a ValueError listing ALL of them.
 
-    max_rows: None (varsayılan) = tüm satırlar. Sayı verilirse sütun/dtype/boş değer kontrolleri yine
-    TÜM veride, satır-içi tutarlılık kontrolleri (zaman, aralık, slug…) rastgele max_rows satırda yapılır.
-    P1/P2 yazarken None kullanır; query.py okurken hız için örneklem kullanır.
+    max_rows: None (default) = all rows. If a number is given, column/dtype/null checks still run on
+    ALL data, while row-level consistency checks (time, range, slug…) run on a random sample of max_rows rows.
+    P1/P2 use None when writing; query.py uses a sample when reading, for speed.
 
-    stage="ingest": weight_harm tamamen NaN olmalı (P1 harmonize etmez).
-    stage="harm":   weight_harm NaN içermez ve ≥ 0 (P2 çıktısı).
-    stage="any":    weight_harm kontrol edilmez (query.py okurken).
+    stage="ingest": weight_harm must be entirely NaN (P1 does not harmonize).
+    stage="harm":   weight_harm contains no NaN and is ≥ 0 (P2 output).
+    stage="any":    weight_harm is not checked (when query.py reads).
     """
     if stage not in ("ingest", "harm", "any"):
         raise ValueError(f"stage 'ingest' | 'harm' | 'any' olmalı: {stage!r}")

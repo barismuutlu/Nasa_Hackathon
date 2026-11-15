@@ -1,33 +1,33 @@
-"""Deneysel 30 günlük tespit görünümü — sahibi P4 Barış. Sözleşme: docs/CONTRACT.md §7.5
+"""Experimental 30-day detection outlook — owner P4 Barış. Contract: docs/CONTRACT.md §7.5
 
-Soru: harmonize (MODIS-eşdeğeri) tespit geçmişinden, önümüzdeki 30 günde bir 1° hücrede tespit düzeyi
-normalin altında mı, üstünde mi olur?
+Question: from the harmonized (MODIS-equivalent) detection history, will the detection level in a 1° cell
+over the next 30 days be below or above normal?
 
-Yöntem (normal + kalıcılık; P2 Bahtiyar'ın aylık prototipinden 30 günlük kayan pencereye uyarlandı)
-- Veri: data/hotspots_harm.parquet, sadece `argentina`, günlük Σ weight_harm, 1° hücre (floor + 0.5).
-- Hedef penceresi W=30 gün; girdi penceresi hedeften GAP=2 gün önce biter (son NRT günü eksik olabilir).
-- log1p(hedef) = normal[hücre, pencere] + a · sapma[hücre, girdi] + b · sapma_bölge[girdi]
-  normal = aynı takvim penceresinin geçmiş yıllardaki log1p ortalaması; sapma = log1p(girdi) − girdinin normali.
-- Bölge toplamı: log ölçeğinden toplamak sistematik düşük verir (geriye dönük testte Arjantin −%24).
-  Bu yüzden model ORANI tahmin eder (Σ beklenen_geo / Σ normal_geo) ve bu oran son 10 yılın aynı
-  pencere toplamlarının aritmetik ortalamasıyla çarpılır (test sapması ≈ %0).
-- Geriye dönük test: 2015–2025, her ayın 15'inde başlayan pencereler (132 başlangıç); her test yılı
-  yalnızca önceki yıllarla kurulur. Beceri = 1 − MSE_model / MSE_normal (log), yön isabeti |tahmin| > 0,2.
-- Aralık: aynı testteki bölge toplamı log hatalarının %10–%90 dilimleri.
-- SADECE NASA VERİSİ. NASA POWER hava ve NASA MERRA-2 El Niño göstergesi denendi, iyileştirmedi
-  (dal p4/forecast-experiments, experiments/forecast/README.md).
+Method (normal + persistence; adapted from P2 Bahtiyar's monthly prototype to a 30-day sliding window)
+- Data: data/hotspots_harm.parquet, only `argentina`, daily Σ weight_harm, 1° cell (floor + 0.5).
+- Target window W=30 days; the input window ends GAP=2 days before the target (the last NRT day may be incomplete).
+- log1p(target) = normal[cell, window] + a · deviation[cell, input] + b · regional_deviation[input]
+  normal = log1p mean of the same calendar window in past years; deviation = log1p(input) − the input's normal.
+- Regional total: summing from the log scale gives a systematic underestimate (Argentina −24% in the backtest).
+  So the model predicts a RATIO (Σ expected_geo / Σ normal_geo), and this ratio is multiplied by the
+  arithmetic mean of the same window's totals over the last 10 years (test bias ≈ 0%).
+- Backtest: 2015–2025, windows starting on the 15th of each month (132 start dates); each test year
+  is fitted on earlier years only. Skill = 1 − MSE_model / MSE_normal (log), direction hit rate for |prediction| > 0.2.
+- Range: 10%–90% quantiles of the regional-total log errors from the same backtest.
+- NASA DATA ONLY. NASA POWER weather and a NASA MERRA-2 El Niño index were tried and did not improve it
+  (branch p4/forecast-experiments, experiments/forecast/README.md).
 
-Bu bir TESPİT sayısı görünümüdür, yangın tahmini değildir (CONTRACT §8). Doğrulanmış bir ürün değil.
+This is an outlook for DETECTION counts, not a fire forecast (CONTRACT §8). Not a validated product.
 
-Çıktılar
-    data/deploy/forecast.parquet     hücre başına canlı görünüm (git'e girer, query.forecast() okur)
-    data/deploy/forecast_history.parquet  hücre × geçmiş yıl: aynı 30 günlük penceredeki tespit (grafik için)
-    docs/forecast/metrics.json       test metrikleri + aralık dilimleri
-    docs/forecast/backtest.png       geriye dönük test: Arjantin ve La Rioja 30 günlük toplamlar
-    docs/forecast/backtest_dark.png  aynısı, saydam zemin (uygulamanın koyu teması)
+Outputs
+    data/deploy/forecast.parquet     live outlook per cell (committed to git, read by query.forecast())
+    data/deploy/forecast_history.parquet  cell × past year: detections in the same 30-day window (for the chart)
+    docs/forecast/metrics.json       test metrics + range quantiles
+    docs/forecast/backtest.png       backtest: Argentina and La Rioja 30-day totals
+    docs/forecast/backtest_dark.png  same, transparent background (the app's dark theme)
     docs/forecast/summary.md
 
-Çalıştır (repo kökünden):  python pipeline/forecast.py
+Run (from the repo root):  python pipeline/forecast.py
 """
 from __future__ import annotations
 
@@ -51,24 +51,24 @@ from query import PRESETS  # noqa: E402
 
 SRC = ROOT / "data" / "hotspots_harm.parquet"
 OUT = ROOT / "data" / "deploy" / "forecast.parquet"
-OUT_HIST = ROOT / "data" / "deploy" / "forecast_history.parquet"   # aynı pencere, geçmiş yıllar (grafik)
+OUT_HIST = ROOT / "data" / "deploy" / "forecast_history.parquet"   # same window, past years (chart)
 DOCS = ROOT / "docs" / "forecast"
 
 REGION = "argentina"
-DAY0 = pd.Timestamp("2003-01-01")      # iki MODIS uydusu (Terra-only dönem hariç)
-W = 30                                 # gün, hedef ve girdi penceresi
-GAP = 2                                # girdi penceresinin sonu ile hedef başlangıcı arası atlanan gün
-ORIGIN_DAY = 15                        # geriye dönük test: her ayın 15'i
+DAY0 = pd.Timestamp("2003-01-01")      # both MODIS satellites (Terra-only period excluded)
+W = 30                                 # days, target and input window
+GAP = 2                                # days skipped between the end of the input window and the target start
+ORIGIN_DAY = 15                        # backtest: the 15th of each month
 TEST_YEARS = (2015, 2025)
-NORMAL_YEARS = 10                      # ölçek için aritmetik normal: son 10 tam yıl
-MIN_DEV = 0.2                          # yön isabeti için "belirgin" tahmin eşiği (log)
-SMALL_SELECTION = 100                  # bu kadar hücreden az seçimde La Rioja ölçeğinin (daha geniş) aralığı
+NORMAL_YEARS = 10                      # arithmetic normal for scaling: last 10 full years
+MIN_DEV = 0.2                          # "clear" prediction threshold for the direction hit rate (log)
+SMALL_SELECTION = 100                  # selections with fewer cells use the (wider) La Rioja-scale range
 LA_RIOJA = PRESETS["La Rioja (AR)"]
 FEATURES = ["pdev", "rpdev"]
 
 
 def load_daily() -> tuple[np.ndarray, pd.DataFrame, pd.Timestamp]:
-    """Hücre × gün Σ weight_harm (kümülatif). Son tespit günü NRT'de eksik olabilir → data_through = son gün − 1."""
+    """Cell × day Σ weight_harm (cumulative). The last detection day may be incomplete in NRT → data_through = last day − 1."""
     t = pq.read_table(SRC, columns=["latitude", "longitude", "acq_date", "region", "weight_harm"],
                       filters=[("region", "=", REGION)]).to_pandas()
     if t.empty or t["weight_harm"].isna().any():
@@ -89,7 +89,7 @@ def load_daily() -> tuple[np.ndarray, pd.DataFrame, pd.Timestamp]:
 
 
 def window_sum(cum: np.ndarray, start: pd.Timestamp) -> np.ndarray | None:
-    """[start, start + W) gün toplamı, hücre başına; veri kapsamı dışındaysa None."""
+    """Sum over days [start, start + W), per cell; None if outside the data coverage."""
     s = (start - DAY0).days
     if s < 0 or s + W > cum.shape[1] - 1:
         return None
@@ -97,7 +97,7 @@ def window_sum(cum: np.ndarray, start: pd.Timestamp) -> np.ndarray | None:
 
 
 def windows(cum: np.ndarray, cells: pd.DataFrame, starts: list[tuple[int, int, pd.Timestamp]]) -> pd.DataFrame:
-    """Her (yıl, anahtar, hedef başlangıcı) için hücre başına girdi ve hedef pencere toplamları."""
+    """Per-cell input and target window totals for each (year, key, target start)."""
     rows = []
     for year, key, start in starts:
         prev = window_sum(cum, start - pd.Timedelta(days=GAP + W))
@@ -110,7 +110,7 @@ def windows(cum: np.ndarray, cells: pd.DataFrame, starts: list[tuple[int, int, p
 
 
 def add_deviations(d: pd.DataFrame, hist: pd.DataFrame) -> pd.DataFrame:
-    """Normaller sadece `hist` satırlarından (sızıntı yok); sapmalar log1p ölçeğinde."""
+    """Normals only from `hist` rows (no leakage); deviations on the log1p scale."""
     hist = hist.assign(lp=np.log1p(hist["prev"]), ln=np.log1p(hist["next"]))
     norms = hist.groupby(["ci", "key"]).agg(nn=("ln", "mean"), pn=("lp", "mean"))
     d = d.join(norms, on=["ci", "key"])
@@ -121,7 +121,7 @@ def add_deviations(d: pd.DataFrame, hist: pd.DataFrame) -> pd.DataFrame:
 
 
 def arith_normal(d_all: pd.DataFrame, year: int) -> pd.Series:
-    """(ci, key) → son NORMAL_YEARS yılın aynı pencere toplamlarının ortalaması."""
+    """(ci, key) → mean of the same window's totals over the last NORMAL_YEARS years."""
     h = d_all[d_all["year"].between(year - NORMAL_YEARS, year - 1) & d_all["next"].notna()]
     return h.groupby(["ci", "key"])["next"].mean().rename("anorm")
 
@@ -152,7 +152,7 @@ def backtest(cum: np.ndarray, cells: pd.DataFrame, data_through: pd.Timestamp) -
         big = np.abs(p) > MIN_DEV
         hits += int((np.sign(p[big]) == np.sign(test["dev"].to_numpy()[big])).sum())
         n_dir += int(big.sum())
-        test["egeo"], test["ngeo"] = np.expm1(np.maximum(test["nn"] + p, 0.0)), np.expm1(test["nn"])   # sayı ≥ 0
+        test["egeo"], test["ngeo"] = np.expm1(np.maximum(test["nn"] + p, 0.0)), np.expm1(test["nn"])   # count ≥ 0
         test = test.join(arith_normal(d_all, year), on=["ci", "key"])
         for scope, mask in [("argentina", test.index), ("la_rioja", test.index[test["la_rioja"]])]:
             g = test.loc[mask].groupby(["year", "key"])[["next", "egeo", "ngeo", "anorm"]].sum()
@@ -177,7 +177,7 @@ def backtest(cum: np.ndarray, cells: pd.DataFrame, data_through: pd.Timestamp) -
 
 
 def plot_backtest(tot: pd.DataFrame, metrics: dict) -> None:
-    """backtest.png (açık zemin, README) + backtest_dark.png (saydam zemin, açık yazı; uygulamanın koyu teması)."""
+    """backtest.png (light background, README) + backtest_dark.png (transparent background, light text; the app's dark theme)."""
     for fname, fg, actual, grid, transparent in [("backtest.png", "#222222", "#222222", "#cccccc", False),
                                                   ("backtest_dark.png", "#e8e6e3", "#f2f2f2", "#555555", True)]:
         with plt.rc_context({"text.color": fg, "axes.labelcolor": fg, "xtick.color": fg, "ytick.color": fg,
@@ -211,13 +211,13 @@ def plot_backtest(tot: pd.DataFrame, metrics: dict) -> None:
 def same_window(year: int, start: pd.Timestamp) -> pd.Timestamp:
     try:
         return start.replace(year=year)
-    except ValueError:                                  # 29 Şubat
+    except ValueError:                                  # 29 February
         return start.replace(year=year, day=28)
 
 
 def live_outlook(cum: np.ndarray, cells: pd.DataFrame,
                  data_through: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Hedef: data_through + GAP + 1 → +W gün. Normaller aynı takvim penceresinin geçmiş yıllarından."""
+    """Target: data_through + GAP + 1 → +W days. Normals from the same calendar window in past years."""
     start = data_through + pd.Timedelta(days=GAP + 1)
     end = start + pd.Timedelta(days=W - 1)
     tr = windows(cum, cells, origin_starts(data_through))
@@ -228,7 +228,7 @@ def live_outlook(cum: np.ndarray, cells: pd.DataFrame,
     live = add_deviations(cal[cal["year"] == start.year].copy(), hist)
     if live[["pdev", "nn"]].isna().any().any():
         raise ValueError("canlı pencere için normal ya da girdi eksik")
-    live["expected_geo"] = np.expm1(np.maximum(live["nn"] + model.predict(live[FEATURES]), 0.0))   # sayı ≥ 0
+    live["expected_geo"] = np.expm1(np.maximum(live["nn"] + model.predict(live[FEATURES]), 0.0))   # count ≥ 0
     live["normal_geo"] = np.expm1(live["nn"])
     anorm = hist[hist["year"] >= start.year - NORMAL_YEARS].groupby("ci")["next"].mean().rename("normal")
     out = live.join(anorm, on="ci").merge(cells, on="ci")
@@ -247,7 +247,7 @@ def live_outlook(cum: np.ndarray, cells: pd.DataFrame,
 
 
 def region_summary(out: pd.DataFrame, metrics: dict, mask) -> dict:
-    """query.forecast() ile aynı hesap (oran × aritmetik normal, test hatası dilimlerinden aralık)."""
+    """Same computation as query.forecast() (ratio × arithmetic normal, range from test-error quantiles)."""
     s = out.loc[mask]
     ratio = s["expected_geo"].sum() / s["normal_geo"].sum()
     pred = ratio * s["normal"].sum()

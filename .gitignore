@@ -1,10 +1,10 @@
-# Veri — ham CSV ve büyük parquet'ler git'e girmez
+# Data — raw CSVs and large parquets do not go into git
 data/*
 !data/sample/
 !data/mock/
 !data/deploy/
 
-# Kişisel Claude ayarı (herkes kendi rol dosyasını import eder)
+# Personal Claude setting (everyone imports their own role file)
 CLAUDE.local.md
 
 # Python
@@ -14,7 +14,7 @@ __pycache__/
 venv/
 .ipynb_checkpoints/
 
-# Gizli / sistem
+# Secrets / system
 .env
 .streamlit/secrets.toml
 .DS_Store
